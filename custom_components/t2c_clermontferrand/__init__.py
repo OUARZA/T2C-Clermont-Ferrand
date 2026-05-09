@@ -2,41 +2,39 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import T2CClient
-from .const import DEFAULT_SCAN_INTERVAL_MINUTES, DOMAIN
+from .const import DOMAIN
+from .coordinator import T2CDataUpdateCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 
+@dataclass(slots=True)
+class T2CRuntimeData:
+    """Runtime data stored for a T2C config entry."""
+
+    client: T2CClient
+    coordinator: T2CDataUpdateCoordinator
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up T2C Clermont-Ferrand from a config entry."""
-    client = T2CClient()
-
-    coordinator = DataUpdateCoordinator(
-        hass,
-        hass.loop,
-        logger=__import__("logging").getLogger(__name__),
-        name=DOMAIN,
-        update_method=lambda: client.async_get_next_passages(
-            stop_id=entry.data["stop_id"],
-        ),
-        update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL_MINUTES),
-    )
-
+    client = T2CClient(async_get_clientsession(hass))
+    coordinator = T2CDataUpdateCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = {
-        "client": client,
-        "coordinator": coordinator,
-    }
+    hass.data[DOMAIN][entry.entry_id] = T2CRuntimeData(
+        client=client,
+        coordinator=coordinator,
+    )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -48,5 +46,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
+        if not hass.data[DOMAIN]:
+            hass.data.pop(DOMAIN)
 
     return unload_ok

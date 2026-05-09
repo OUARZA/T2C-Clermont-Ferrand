@@ -1,0 +1,28 @@
+{
+  "title": "T2C Clermont-Ferrand",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Choisir une ligne T2C",
+        "description": "Les lignes sont chargées depuis le GTFS officiel T2C.",
+        "data": {
+          "line_id": "Ligne"
+        }
+      },
+      "stop": {
+        "title": "Choisir un arrêt",
+        "description": "Sélectionnez l'arrêt à surveiller pour la ligne {line}.",
+        "data": {
+          "stop_id": "Arrêt et direction"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de charger les données officielles T2C."
+    },
+    "abort": {
+      "already_configured": "Cet arrêt est déjà configuré.",
+      "cannot_connect": "Impossible de charger les données officielles T2C."
+    }
+  }
+}

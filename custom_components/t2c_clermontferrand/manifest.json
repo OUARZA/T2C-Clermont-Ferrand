@@ -9,7 +9,7 @@
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/ouarza/t2c_clermontferrand/issues",
   "requirements": [
-    "beautifulsoup4==4.12.3"
+    "gtfs-realtime-bindings==1.0.0"
   ],
   "version": "0.1.0"
 }
