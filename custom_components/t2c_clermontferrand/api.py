@@ -105,6 +105,7 @@ class T2CDeparture:
     estimated_at: datetime | None = None
     status: str | None = None
     theoretical: bool | None = None
+    info: str | None = None
 
     @property
     def label(self) -> str:
@@ -136,6 +137,7 @@ class T2CDeparture:
             else None,
             "status": self.status,
             "theoretical": self.theoretical,
+            "info": self.info,
         }
 
 
@@ -527,6 +529,7 @@ def _parse_timetable_departures(
         minutes = max(0, round((int(due_at.timestamp()) - now_ts) / 60))
         status = item.get("departure_status")
         theoretical = item.get("theorique")
+        info = item.get("info")
 
         departures.append(
             T2CDeparture(
@@ -541,6 +544,7 @@ def _parse_timetable_departures(
                 estimated_at=estimated_at,
                 status=status,
                 theoretical=theoretical,
+                info=info,
             )
         )
 

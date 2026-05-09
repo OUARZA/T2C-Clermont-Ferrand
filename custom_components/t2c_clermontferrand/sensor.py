@@ -259,7 +259,7 @@ class T2CLineAlertsSensor(T2CBaseSensor):
         alerts = _alerts(self.coordinator)
         if not alerts:
             return None
-        return alerts[0].get("title")
+        return _format_alert_summary(alerts[0])
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -440,9 +440,10 @@ def _format_departure_time(item: dict[str, Any], due_at: datetime | None) -> str
 
 def _format_departure_info(item: dict[str, Any]) -> str | None:
     """Format timetable status information."""
-    if item.get("status") == "cancelled":
-        return "Annulé"
-    return _format_minutes(item.get("minutes"))
+    info = item.get("info")
+    if isinstance(info, str) and info.strip():
+        return info.strip()
+    return None
 
 
 def _departures(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
@@ -489,3 +490,13 @@ def _format_device_name(entry: ConfigEntry) -> str:
         f"Direction {entry.data[CONF_DIRECTION_NAME]} - "
         f"Arrêt {entry.data[CONF_STOP_NAME]}"
     )
+
+
+def _format_alert_summary(alert: dict[str, Any]) -> str | None:
+    """Format a line alert state as title and message."""
+    title = alert.get("title")
+    text = alert.get("text")
+
+    if title and text:
+        return f"{title} - {text}"
+    return title or text
