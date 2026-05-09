@@ -90,10 +90,7 @@ class T2CBaseSensor(CoordinatorEntity[T2CDataUpdateCoordinator], SensorEntity):
         """Return device info."""
         return {
             "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": (
-                f"T2C {self._entry.data[CONF_LINE_NAME]} - "
-                f"{self._entry.data[CONF_STOP_NAME]}"
-            ),
+            "name": _format_device_name(self._entry),
             "manufacturer": "T2C Clermont-Ferrand",
             "model": "GTFS-Realtime Trip Updates",
         }
@@ -358,3 +355,12 @@ def _alerts(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
     """Return line alerts from coordinator data."""
     data = coordinator.data or {}
     return data.get("alerts", [])
+
+
+def _format_device_name(entry: ConfigEntry) -> str:
+    """Format the Home Assistant device name."""
+    return (
+        f"T2C - Ligne {entry.data[CONF_LINE_NAME]} - "
+        f"Direction {entry.data[CONF_DIRECTION_NAME]} - "
+        f"Arrêt {entry.data[CONF_STOP_NAME]}"
+    )

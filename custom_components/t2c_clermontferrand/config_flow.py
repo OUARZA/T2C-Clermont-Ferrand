@@ -221,7 +221,7 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._abort_if_unique_id_configured()
 
             return self.async_create_entry(
-                title=f"{route.short_name} - {stop.name}",
+                title=_format_entry_title(route.short_name, direction.name, stop.name),
                 data={
                     CONF_LINE_ID: route.route_id,
                     CONF_LINE_NAME: route.short_name,
@@ -275,3 +275,8 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Load stop options."""
         client = T2CClient(async_get_clientsession(self.hass))
         return await client.async_get_stops_for_direction(route_id, direction_id)
+
+
+def _format_entry_title(line: str, direction: str, stop: str) -> str:
+    """Format the Home Assistant config entry title."""
+    return f"T2C - Ligne {line} - Direction {direction} - Arrêt {stop}"
