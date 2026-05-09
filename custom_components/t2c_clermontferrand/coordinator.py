@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import T2CClient, T2CError
 from .const import (
+    CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_ID,
     CONF_LINE_ID,
     CONF_STOP_ID,
@@ -49,7 +50,10 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
                 stop_id=self.entry.data[CONF_STOP_ID],
                 route_id=self.entry.data.get(CONF_LINE_ID),
                 direction_id=self.entry.data.get(CONF_DIRECTION_ID),
-                limit=DEFAULT_DEPARTURE_LIMIT,
+                limit=self.entry.data.get(
+                    CONF_DEPARTURE_LIMIT,
+                    DEFAULT_DEPARTURE_LIMIT,
+                ),
             )
         except T2CError as err:
             _LOGGER.debug("T2C coordinator update failed", exc_info=True)

@@ -25,6 +25,7 @@ from .const import (
     ATTR_REALTIME,
     ATTR_STOP,
     ATTR_TRIP_ID,
+    CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_NAME,
     CONF_LINE_NAME,
     CONF_STOP_NAME,
@@ -41,9 +42,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up T2C sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id].coordinator
+    departure_limit = entry.data.get(CONF_DEPARTURE_LIMIT, DEFAULT_DEPARTURE_LIMIT)
     departure_sensors = [
         T2CDepartureTimeSensor(coordinator, entry, index)
-        for index in range(DEFAULT_DEPARTURE_LIMIT)
+        for index in range(departure_limit)
     ]
     async_add_entities(
         [

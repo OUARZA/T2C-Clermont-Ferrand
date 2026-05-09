@@ -16,13 +16,17 @@ import voluptuous as vol
 
 from .api import T2CClient, T2CDirection, T2CError, T2CRoute, T2CStop
 from .const import (
+    CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_ID,
     CONF_DIRECTION_NAME,
     CONF_LINE_ID,
     CONF_LINE_NAME,
     CONF_STOP_ID,
     CONF_STOP_NAME,
+    DEFAULT_DEPARTURE_LIMIT,
     DOMAIN,
+    MAX_DEPARTURE_LIMIT,
+    MIN_DEPARTURE_LIMIT,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +44,7 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._stops: dict[str, T2CStop] = {}
         self._route_id: str | None = None
         self._direction_id: str | None = None
+        self._stop_id: str | None = None
 
     async def async_step_user(
         self,
@@ -152,22 +157,8 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="cannot_connect")
 
         if user_input is not None:
-            stop = self._stops[user_input[CONF_STOP_ID]]
-            unique_id = f"{self._route_id}_{self._direction_id}_{stop.stop_id}"
-            await self.async_set_unique_id(unique_id)
-            self._abort_if_unique_id_configured()
-
-            return self.async_create_entry(
-                title=f"{route.short_name} - {stop.label}",
-                data={
-                    CONF_LINE_ID: route.route_id,
-                    CONF_LINE_NAME: route.short_name,
-                    CONF_DIRECTION_ID: direction.direction_id,
-                    CONF_DIRECTION_NAME: direction.name,
-                    CONF_STOP_ID: stop.stop_id,
-                    CONF_STOP_NAME: stop.name,
-                },
-            )
+            self._stop_id = user_input[CONF_STOP_ID]
+            return await self.async_step_departures()
 
         try:
             stops = await self._async_get_stops(self._route_id, self._direction_id)
@@ -201,6 +192,66 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={
                 "direction": direction.name,
                 "line": route.label,
+            },
+        )
+
+    async def async_step_departures(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Select how many upcoming departures should be exposed."""
+        if self._route_id is None:
+            return await self.async_step_user()
+        if self._direction_id is None:
+            return await self.async_step_direction()
+        if self._stop_id is None:
+            return await self.async_step_stop()
+
+        route = self._routes.get(self._route_id)
+        direction = self._directions.get(self._direction_id)
+        stop = self._stops.get(self._stop_id)
+
+        if route is None or direction is None or stop is None:
+            return self.async_abort(reason="cannot_connect")
+
+        if user_input is not None:
+            departure_limit = user_input[CONF_DEPARTURE_LIMIT]
+            unique_id = f"{self._route_id}_{self._direction_id}_{stop.stop_id}"
+            await self.async_set_unique_id(unique_id)
+            self._abort_if_unique_id_configured()
+
+            return self.async_create_entry(
+                title=f"{route.short_name} - {stop.name}",
+                data={
+                    CONF_LINE_ID: route.route_id,
+                    CONF_LINE_NAME: route.short_name,
+                    CONF_DIRECTION_ID: direction.direction_id,
+                    CONF_DIRECTION_NAME: direction.name,
+                    CONF_STOP_ID: stop.stop_id,
+                    CONF_STOP_NAME: stop.name,
+                    CONF_DEPARTURE_LIMIT: departure_limit,
+                },
+            )
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_DEPARTURE_LIMIT,
+                    default=DEFAULT_DEPARTURE_LIMIT,
+                ): vol.All(
+                    vol.Coerce(int),
+                    vol.Range(min=MIN_DEPARTURE_LIMIT, max=MAX_DEPARTURE_LIMIT),
+                )
+            }
+        )
+
+        return self.async_show_form(
+            step_id="departures",
+            data_schema=schema,
+            description_placeholders={
+                "direction": direction.name,
+                "line": route.label,
+                "stop": stop.name,
             },
         )
 

@@ -22,6 +22,13 @@
         "data": {
           "stop_id": "Arrêt"
         }
+      },
+      "departures": {
+        "title": "Choisir le nombre de passages",
+        "description": "Sélectionnez le nombre de prochains passages à afficher pour {stop}, ligne {line}, direction {direction}.",
+        "data": {
+          "departure_limit": "Nombre de prochains passages"
+        }
       }
     },
     "error": {

@@ -41,12 +41,13 @@ Depuis Home Assistant :
 3. Sélectionner la ligne.
 4. Sélectionner la direction.
 5. Sélectionner l'arrêt.
+6. Choisir le nombre de prochains passages à afficher.
 
 L'intégration crée :
 
 - un capteur `Prochain passage`, dont l'état est le temps d'attente du prochain départ en minutes ;
 - un capteur `Passages disponibles`, dont les attributs contiennent une liste `departures` prête pour un affichage en tableau ;
-- des capteurs `Passage 1` à `Passage 5`, exposés comme timestamps Home Assistant.
+- des capteurs `Passage 1` à `Passage X`, exposés comme timestamps Home Assistant, selon le nombre choisi pendant la configuration.
 
 ## Exemple d'affichage
 
