@@ -16,6 +16,7 @@ from homeassistant.util import dt as dt_util
 from .const import (
     ATTR_AFFECTED_ROUTES,
     ATTR_ALERTS,
+    ATTR_COUNT,
     ATTR_DEPARTURES,
     ATTR_DUE_AT,
     ATTR_DIRECTION,
@@ -62,6 +63,10 @@ async def async_setup_entry(
         T2CDepartureTimeSensor(coordinator, entry, index)
         for index in range(departure_limit)
     ]
+    departure_info_sensors = [
+        T2CDepartureInfoSensor(coordinator, entry, index)
+        for index in range(departure_limit)
+    ]
     async_add_entities(
         [
             T2CNextPassageSensor(coordinator, entry),
@@ -69,6 +74,7 @@ async def async_setup_entry(
             T2CLineAlertsSensor(coordinator, entry),
             T2CNetworkInformationSensor(network_coordinator),
             *departure_sensors,
+            *departure_info_sensors,
         ]
     )
 
@@ -208,9 +214,12 @@ class T2CNetworkInformationSensor(
         }
 
     @property
-    def native_value(self) -> int:
-        """Return available network message count."""
-        return len(_network_messages(self.coordinator))
+    def native_value(self) -> str | None:
+        """Return the first network message title."""
+        messages = _network_messages(self.coordinator)
+        if not messages:
+            return None
+        return messages[0].get("title")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -219,6 +228,7 @@ class T2CNetworkInformationSensor(
         first = messages[0] if messages else {}
 
         return {
+            ATTR_COUNT: len(messages),
             ATTR_MESSAGES: messages,
             "title": first.get("title"),
             "text": first.get("text"),
@@ -244,9 +254,12 @@ class T2CLineAlertsSensor(T2CBaseSensor):
         super().__init__(coordinator, entry, "line_alerts")
 
     @property
-    def native_value(self) -> int:
-        """Return available line alert count."""
-        return len(_alerts(self.coordinator))
+    def native_value(self) -> str | None:
+        """Return the first line alert title."""
+        alerts = _alerts(self.coordinator)
+        if not alerts:
+            return None
+        return alerts[0].get("title")
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -257,6 +270,7 @@ class T2CLineAlertsSensor(T2CBaseSensor):
         return {
             ATTR_LINE: self._entry.data[CONF_LINE_NAME],
             ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
+            ATTR_COUNT: len(alerts),
             ATTR_ALERTS: alerts,
             "title": first.get("title"),
             "text": first.get("text"),
@@ -289,6 +303,13 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         if departure is None:
             return None
 
+        if departure.get("status") == "cancelled":
+            time_value = _format_departure_time(
+                departure,
+                _parse_datetime(departure.get("due_at")),
+            )
+            return f"{time_value} annulé" if time_value else "Annulé"
+
         due_at = _parse_datetime(departure.get("due_at"))
         if self._index == 0:
             return _format_minutes(departure.get("minutes"))
@@ -313,6 +334,53 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
             ATTR_THEORETICAL: departure.get("theoretical"),
             ATTR_REALTIME: departure.get("realtime"),
             ATTR_TRIP_ID: departure.get("trip_id"),
+        }
+
+    @property
+    def _departure(self) -> dict[str, Any] | None:
+        """Return the departure represented by this sensor."""
+        data = _departures(self.coordinator)
+        if self._index >= len(data):
+            return None
+        return data[self._index]
+
+
+class T2CDepartureInfoSensor(T2CBaseSensor):
+    """Sensor exposing the information column for one departure."""
+
+    def __init__(
+        self,
+        coordinator: T2CDataUpdateCoordinator,
+        entry: ConfigEntry,
+        index: int,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, f"departure_{index + 1}_info")
+        self._index = index
+        self._attr_name = f"Info passage {index + 1}"
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the departure information."""
+        departure = self._departure
+        if departure is None:
+            return None
+        return _format_departure_info(departure)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return departure details."""
+        departure = self._departure or {}
+        return {
+            ATTR_LINE: departure.get("route_name") or self._entry.data[CONF_LINE_NAME],
+            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
+            ATTR_STOP: self._entry.data[CONF_STOP_NAME],
+            ATTR_DESTINATION: departure.get("destination"),
+            ATTR_DUE_AT: departure.get("due_at"),
+            ATTR_MINUTES: departure.get("minutes"),
+            ATTR_STATUS: departure.get("status"),
+            ATTR_THEORETICAL: departure.get("theoretical"),
+            ATTR_REALTIME: departure.get("realtime"),
         }
 
     @property

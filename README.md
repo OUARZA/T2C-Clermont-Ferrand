@@ -50,9 +50,10 @@ L'intégration crée :
 
 - un capteur `Prochain passage`, dont l'état est le temps d'attente du prochain départ en minutes ;
 - un capteur `Passages disponibles`, dont les attributs contiennent une liste `departures` prête pour un affichage en tableau ;
-- un capteur `Perturbations ligne`, dont les attributs contiennent les alertes trafic de la ligne ;
+- un capteur `Perturbations ligne`, dont l'état affiche la première perturbation et dont les attributs contiennent toutes les alertes trafic de la ligne ;
 - un capteur global `Informations réseau`, rattaché à l'appareil `T2C - Informations réseau`, pour éviter de dupliquer les informations générales sur chaque arrêt ;
 - des capteurs `Passage 1` à `Passage X`, où `Passage 1` affiche le temps restant et les suivants affichent l'heure T2C, avec l'information de statut en attribut.
+- des capteurs `Info passage 1` à `Info passage X`, pour afficher directement la colonne `Info` de chaque passage.
 
 ## Exemple d'affichage
 
