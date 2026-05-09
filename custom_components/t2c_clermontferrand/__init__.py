@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -14,6 +15,7 @@ from .const import DOMAIN
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -31,7 +33,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = T2CDataUpdateCoordinator(hass, entry, client)
     network_coordinator = T2CNetworkCoordinator(hass, client)
     await coordinator.async_config_entry_first_refresh()
-    await network_coordinator.async_config_entry_first_refresh()
+    await network_coordinator.async_refresh()
+    if not network_coordinator.last_update_success:
+        _LOGGER.debug("T2C network information is unavailable during setup")
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = T2CRuntimeData(

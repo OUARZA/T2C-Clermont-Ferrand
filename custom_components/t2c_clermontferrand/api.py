@@ -22,7 +22,6 @@ from .const import (
     DATASET_API_URL,
     GTFS_RT_TRIP_UPDATES_URL,
     LINE_ALERTS_API_URL,
-    NETWORK_MESSAGES_API_URL,
     QR_TIMETABLE_API_URL,
 )
 
@@ -32,6 +31,7 @@ GTFS_CACHE_SECONDS = 12 * 60 * 60
 HTTP_TIMEOUT = 20
 MAX_STOP_OPTIONS = 500
 T2C_TIME_ZONE = ZoneInfo("Europe/Paris")
+NETWORK_MESSAGES_API_URL = "https://api.t2c.fr/siv/alerts"
 
 
 class T2CError(Exception):
