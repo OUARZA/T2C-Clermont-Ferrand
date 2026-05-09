@@ -14,7 +14,7 @@ from homeassistant.helpers.selector import (
 )
 import voluptuous as vol
 
-from .api import T2CClient, T2CError, T2CRoute, T2CStop
+from .api import T2CClient, T2CDirection, T2CError, T2CRoute, T2CStop
 from .const import (
     CONF_DIRECTION_ID,
     CONF_DIRECTION_NAME,
@@ -36,8 +36,10 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the flow."""
         self._routes: dict[str, T2CRoute] = {}
+        self._directions: dict[str, T2CDirection] = {}
         self._stops: dict[str, T2CStop] = {}
         self._route_id: str | None = None
+        self._direction_id: str | None = None
 
     async def async_step_user(
         self,
@@ -48,7 +50,7 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             self._route_id = user_input[CONF_LINE_ID]
-            return await self.async_step_stop()
+            return await self.async_step_direction()
 
         try:
             routes = await self._async_get_routes()
@@ -76,11 +78,11 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_stop(
+    async def async_step_direction(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Select the T2C stop."""
+        """Select the T2C direction."""
         errors: dict[str, str] = {}
 
         if self._route_id is None:
@@ -91,8 +93,67 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_abort(reason="cannot_connect")
 
         if user_input is not None:
+            self._direction_id = user_input[CONF_DIRECTION_ID]
+            return await self.async_step_stop()
+
+        try:
+            directions = await self._async_get_directions(self._route_id)
+        except T2CError:
+            _LOGGER.exception(
+                "Unable to load T2C directions for route %s",
+                self._route_id,
+            )
+            errors["base"] = "cannot_connect"
+            directions = []
+
+        self._directions = {
+            direction.direction_id: direction for direction in directions
+        }
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_DIRECTION_ID): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            SelectOptionDict(
+                                value=direction.direction_id,
+                                label=direction.name,
+                            )
+                            for direction in directions
+                        ],
+                    )
+                )
+            }
+        )
+
+        return self.async_show_form(
+            step_id="direction",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"line": route.label},
+        )
+
+    async def async_step_stop(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Select the T2C stop."""
+        errors: dict[str, str] = {}
+
+        if self._route_id is None:
+            return await self.async_step_user()
+        if self._direction_id is None:
+            return await self.async_step_direction()
+
+        route = self._routes.get(self._route_id)
+        direction = self._directions.get(self._direction_id)
+        if route is None:
+            return self.async_abort(reason="cannot_connect")
+        if direction is None:
+            return self.async_abort(reason="cannot_connect")
+
+        if user_input is not None:
             stop = self._stops[user_input[CONF_STOP_ID]]
-            unique_id = f"{self._route_id}_{stop.stop_id}_{stop.direction_id or 'all'}"
+            unique_id = f"{self._route_id}_{self._direction_id}_{stop.stop_id}"
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
 
@@ -101,27 +162,31 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data={
                     CONF_LINE_ID: route.route_id,
                     CONF_LINE_NAME: route.short_name,
-                    CONF_DIRECTION_ID: stop.direction_id,
-                    CONF_DIRECTION_NAME: stop.direction_name,
+                    CONF_DIRECTION_ID: direction.direction_id,
+                    CONF_DIRECTION_NAME: direction.name,
                     CONF_STOP_ID: stop.stop_id,
                     CONF_STOP_NAME: stop.name,
                 },
             )
 
         try:
-            stops = await self._async_get_stops(self._route_id)
+            stops = await self._async_get_stops(self._route_id, self._direction_id)
         except T2CError:
-            _LOGGER.exception("Unable to load T2C stops for route %s", self._route_id)
+            _LOGGER.exception(
+                "Unable to load T2C stops for route %s direction %s",
+                self._route_id,
+                self._direction_id,
+            )
             errors["base"] = "cannot_connect"
             stops = []
 
-        self._stops = {stop.option_value: stop for stop in stops}
+        self._stops = {stop.stop_id: stop for stop in stops}
         schema = vol.Schema(
             {
                 vol.Required(CONF_STOP_ID): SelectSelector(
                     SelectSelectorConfig(
                         options=[
-                            SelectOptionDict(value=stop.option_value, label=stop.label)
+                            SelectOptionDict(value=stop.stop_id, label=stop.name)
                             for stop in stops
                         ],
                     )
@@ -133,7 +198,10 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="stop",
             data_schema=schema,
             errors=errors,
-            description_placeholders={"line": route.label},
+            description_placeholders={
+                "direction": direction.name,
+                "line": route.label,
+            },
         )
 
     async def _async_get_routes(self) -> list[T2CRoute]:
@@ -143,7 +211,16 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._routes = {route.route_id: route for route in routes}
         return routes
 
-    async def _async_get_stops(self, route_id: str) -> list[T2CStop]:
+    async def _async_get_directions(self, route_id: str) -> list[T2CDirection]:
+        """Load direction options."""
+        client = T2CClient(async_get_clientsession(self.hass))
+        return await client.async_get_directions_for_route(route_id)
+
+    async def _async_get_stops(
+        self,
+        route_id: str,
+        direction_id: str,
+    ) -> list[T2CStop]:
         """Load stop options."""
         client = T2CClient(async_get_clientsession(self.hass))
-        return await client.async_get_stops_for_route(route_id)
+        return await client.async_get_stops_for_direction(route_id, direction_id)

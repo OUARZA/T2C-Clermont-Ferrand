@@ -63,18 +63,19 @@ class T2CStop:
     direction_name: str | None = None
 
     @property
-    def option_value(self) -> str:
-        """Return the selector value stored during the config flow."""
-        return "|".join(
-            (self.stop_id, self.direction_id or "", self.direction_name or "")
-        )
-
-    @property
     def label(self) -> str:
         """Return a stop label suitable for Home Assistant selectors."""
         if self.direction_name:
             return f"{self.name} -> {self.direction_name}"
         return self.name
+
+
+@dataclass(slots=True, frozen=True)
+class T2CDirection:
+    """A T2C route direction from static GTFS."""
+
+    direction_id: str
+    name: str
 
 
 @dataclass(slots=True, frozen=True)
@@ -122,6 +123,7 @@ class _GtfsIndex:
     routes: dict[str, T2CRoute]
     stops: dict[str, str]
     route_stops: dict[str, list[T2CStop]]
+    route_directions: dict[str, list[T2CDirection]]
     trip_routes: dict[str, str]
     trip_headsigns: dict[str, str]
     loaded_at: float
@@ -147,9 +149,41 @@ class T2CClient:
 
     async def async_get_stops_for_route(self, route_id: str) -> list[T2CStop]:
         """Return stops served by a route."""
+        return await self.async_get_stops_for_direction(route_id, None)
+
+    async def async_get_directions_for_route(
+        self,
+        route_id: str,
+    ) -> list[T2CDirection]:
+        """Return directions served by a route."""
         gtfs = await self._async_get_gtfs()
-        stops = gtfs.route_stops.get(route_id, [])
-        _LOGGER.debug("Loaded %s T2C stops for route %s", len(stops), route_id)
+        directions = gtfs.route_directions.get(route_id, [])
+        _LOGGER.debug(
+            "Loaded %s T2C directions for route %s",
+            len(directions),
+            route_id,
+        )
+        return directions
+
+    async def async_get_stops_for_direction(
+        self,
+        route_id: str,
+        direction_id: str | None,
+    ) -> list[T2CStop]:
+        """Return stops served by a route direction."""
+        gtfs = await self._async_get_gtfs()
+        matching_stops = [
+            stop
+            for stop in gtfs.route_stops.get(route_id, [])
+            if direction_id is None or stop.direction_id == direction_id
+        ]
+        stops = _deduplicate_stops(matching_stops)
+        _LOGGER.debug(
+            "Loaded %s T2C stops for route %s direction %s",
+            len(stops),
+            route_id,
+            direction_id,
+        )
         return stops
 
     async def async_get_next_departures(
@@ -323,6 +357,11 @@ def _parse_gtfs_zip(payload: bytes, loaded_at: float) -> _GtfsIndex:
             routes = _read_routes(archive)
             stops = _read_stops(archive)
             trip_routes, trip_headsigns, trip_directions = _read_trips(archive)
+            route_directions = _build_route_directions(
+                trip_routes,
+                trip_headsigns,
+                trip_directions,
+            )
             route_stops = _read_route_stops(
                 archive,
                 routes=routes,
@@ -338,6 +377,7 @@ def _parse_gtfs_zip(payload: bytes, loaded_at: float) -> _GtfsIndex:
         routes=routes,
         stops=stops,
         route_stops=route_stops,
+        route_directions=route_directions,
         trip_routes=trip_routes,
         trip_headsigns=trip_headsigns,
         loaded_at=loaded_at,
@@ -384,6 +424,32 @@ def _read_trips(
     return trip_routes, trip_headsigns, trip_directions
 
 
+def _build_route_directions(
+    trip_routes: dict[str, str],
+    trip_headsigns: dict[str, str],
+    trip_directions: dict[str, str],
+) -> dict[str, list[T2CDirection]]:
+    """Build route direction choices from GTFS trips."""
+    by_route: dict[str, dict[str, T2CDirection]] = {}
+
+    for trip_id, route_id in trip_routes.items():
+        direction_id = trip_directions.get(trip_id, "")
+        headsign = trip_headsigns.get(trip_id)
+
+        if not direction_id or not headsign:
+            continue
+
+        by_route.setdefault(route_id, {}).setdefault(
+            direction_id,
+            T2CDirection(direction_id=direction_id, name=headsign),
+        )
+
+    return {
+        route_id: sorted(directions.values(), key=lambda direction: direction.name)
+        for route_id, directions in by_route.items()
+    }
+
+
 def _read_route_stops(
     archive: zipfile.ZipFile,
     *,
@@ -427,6 +493,22 @@ def _read_route_stops(
         collected[route_id] = route_stops[:MAX_STOP_OPTIONS]
 
     return collected
+
+
+def _deduplicate_stops(stops: list[T2CStop]) -> list[T2CStop]:
+    """Return one selector option per physical stop."""
+    deduplicated: dict[str, T2CStop] = {}
+
+    for stop in stops:
+        deduplicated.setdefault(
+            stop.stop_id,
+            T2CStop(stop_id=stop.stop_id, name=stop.name),
+        )
+
+    return sorted(
+        deduplicated.values(),
+        key=lambda stop: _natural_key(stop.name),
+    )[:MAX_STOP_OPTIONS]
 
 
 def _read_csv(archive: zipfile.ZipFile, filename: str) -> list[dict[str, str]]:

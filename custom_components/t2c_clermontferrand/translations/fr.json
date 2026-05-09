@@ -9,11 +9,18 @@
           "line_id": "Ligne"
         }
       },
+      "direction": {
+        "title": "Choisir une direction",
+        "description": "Sélectionnez la direction pour la ligne {line}.",
+        "data": {
+          "direction_id": "Direction"
+        }
+      },
       "stop": {
         "title": "Choisir un arrêt",
-        "description": "Sélectionnez l'arrêt à surveiller pour la ligne {line}.",
+        "description": "Sélectionnez l'arrêt à surveiller pour la ligne {line}, direction {direction}.",
         "data": {
-          "stop_id": "Arrêt et direction"
+          "stop_id": "Arrêt"
         }
       }
     },
