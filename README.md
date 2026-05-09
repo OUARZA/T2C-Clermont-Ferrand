@@ -52,7 +52,7 @@ L'intégration crée :
 - un capteur `Passages disponibles`, dont les attributs contiennent une liste `departures` prête pour un affichage en tableau ;
 - un capteur `Perturbations ligne`, dont les attributs contiennent les alertes trafic de la ligne ;
 - un capteur `Messages d'information`, dont les attributs exposent les messages T2C renvoyés par l'API, avec leur périmètre `scope` (`network`, `line`, `stop` ou `line_and_stop`) ;
-- des capteurs `Passage 1` à `Passage X`, exposés comme timestamps Home Assistant, selon le nombre choisi pendant la configuration.
+- des capteurs `Passage 1` à `Passage X`, où `Passage 1` affiche le temps restant et les suivants affichent l'heure T2C, avec l'information de statut en attribut.
 
 ## Exemple d'affichage
 

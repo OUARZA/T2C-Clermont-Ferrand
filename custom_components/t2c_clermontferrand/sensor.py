@@ -24,6 +24,7 @@ from .const import (
     ATTR_LINE,
     ATTR_MESSAGES,
     ATTR_MINUTES,
+    ATTR_INFO,
     ATTR_NEXT_PASSAGES,
     ATTR_RAW_PASSAGES,
     ATTR_REALTIME,
@@ -261,9 +262,7 @@ class T2CLineAlertsSensor(T2CBaseSensor):
 
 
 class T2CDepartureTimeSensor(T2CBaseSensor):
-    """Sensor exposing one upcoming departure as a timestamp."""
-
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    """Sensor exposing one upcoming departure in T2C display format."""
 
     def __init__(
         self,
@@ -277,13 +276,17 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         self._attr_name = f"Passage {index + 1}"
 
     @property
-    def native_value(self) -> datetime | None:
-        """Return the departure time."""
+    def native_value(self) -> str | None:
+        """Return the departure display value."""
         departure = self._departure
         if departure is None:
             return None
 
-        return _parse_datetime(departure.get("due_at"))
+        due_at = _parse_datetime(departure.get("due_at"))
+        if self._index == 0:
+            return _format_minutes(departure.get("minutes"))
+
+        return _format_departure_time(departure, due_at)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -298,6 +301,7 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
             ATTR_SCHEDULED_AT: departure.get("scheduled_at"),
             ATTR_ESTIMATED_AT: departure.get("estimated_at"),
             ATTR_MINUTES: departure.get("minutes"),
+            ATTR_INFO: _format_departure_info(departure),
             ATTR_STATUS: departure.get("status"),
             ATTR_THEORETICAL: departure.get("theoretical"),
             ATTR_REALTIME: departure.get("realtime"),
