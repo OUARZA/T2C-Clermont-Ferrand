@@ -1,0 +1,23 @@
+{
+  "title": "T2C Clermont-Ferrand",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ajouter un arrêt T2C",
+        "description": "Renseigne la ligne, la direction et l'arrêt à surveiller.",
+        "data": {
+          "line_name": "Nom de la ligne",
+          "line_id": "Identifiant technique de la ligne",
+          "direction_name": "Nom de la direction",
+          "direction_id": "Identifiant technique de la direction",
+          "stop_name": "Nom de l'arrêt",
+          "stop_id": "Identifiant technique de l'arrêt"
+        }
+      }
+    },
+    "error": {},
+    "abort": {
+      "already_configured": "Cet arrêt est déjà configuré."
+    }
+  }
+}
