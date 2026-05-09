@@ -13,7 +13,6 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import T2CClient, T2CError
 from .const import (
     CONF_DEPARTURE_LIMIT,
-    CONF_DIRECTION_ID,
     CONF_LINE_ID,
     CONF_STOP_ID,
     DEFAULT_DEPARTURE_LIMIT,
@@ -50,10 +49,8 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
             DEFAULT_DEPARTURE_LIMIT,
         )
         try:
-            departures = await self.client.async_get_next_departures(
+            departures = await self.client.async_get_timetable_departures(
                 stop_id=self.entry.data[CONF_STOP_ID],
-                route_id=self.entry.data.get(CONF_LINE_ID),
-                direction_id=self.entry.data.get(CONF_DIRECTION_ID),
                 limit=departure_limit,
             )
         except T2CError as err:

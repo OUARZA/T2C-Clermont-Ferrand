@@ -5,7 +5,8 @@ Intégration Home Assistant personnalisée pour afficher les prochains passages 
 Cette version utilise les données ouvertes officielles Clermont Auvergne Métropole :
 
 - GTFS statique pour charger les lignes et les arrêts dans le flux de configuration ;
-- GTFS-RT Trip Updates pour les prochains départs en temps réel ;
+- GTFS-RT Trip Updates pour le support temps réel officiel ;
+- l'API JSON T2C QR Code pour afficher les prochains passages comme sur le site T2C, avec les horaires théoriques et les départs annulés ;
 - l'API JSON T2C `alerts/by-line` pour les perturbations de ligne ;
 - l'API JSON T2C QR Code pour les messages d'information renvoyés avec l'arrêt sélectionné.
 

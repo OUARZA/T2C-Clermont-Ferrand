@@ -13,6 +13,7 @@ import re
 import time
 from typing import Any
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 import zipfile
 
 from aiohttp import ClientError, ClientResponseError, ClientSession
@@ -29,6 +30,7 @@ _LOGGER = logging.getLogger(__name__)
 GTFS_CACHE_SECONDS = 12 * 60 * 60
 HTTP_TIMEOUT = 20
 MAX_STOP_OPTIONS = 500
+T2C_TIME_ZONE = ZoneInfo("Europe/Paris")
 
 
 class T2CError(Exception):
@@ -95,8 +97,13 @@ class T2CDeparture:
     destination: str | None
     due_at: datetime
     minutes: int
+    realtime: bool = True
     trip_id: str | None = None
     vehicle_id: str | None = None
+    scheduled_at: datetime | None = None
+    estimated_at: datetime | None = None
+    status: str | None = None
+    theoretical: bool | None = None
 
     @property
     def label(self) -> str:
@@ -116,10 +123,18 @@ class T2CDeparture:
             "destination": self.destination,
             "due_at": self.due_at.isoformat(),
             "minutes": self.minutes,
-            "realtime": True,
+            "realtime": self.realtime,
             "label": self.label,
             "trip_id": self.trip_id,
             "vehicle_id": self.vehicle_id,
+            "scheduled_at": self.scheduled_at.isoformat()
+            if self.scheduled_at
+            else None,
+            "estimated_at": self.estimated_at.isoformat()
+            if self.estimated_at
+            else None,
+            "status": self.status,
+            "theoretical": self.theoretical,
         }
 
 
@@ -271,7 +286,7 @@ class T2CClient:
         direction_id: str | None = None,
         limit: int = 5,
     ) -> list[dict[str, Any]]:
-        """Return next realtime departures for a stop."""
+        """Return next departures for a stop from GTFS-RT."""
         gtfs = await self._async_get_gtfs()
         payload = await self._async_get_bytes(GTFS_RT_TRIP_UPDATES_URL)
         departures = await asyncio.to_thread(
@@ -292,6 +307,22 @@ class T2CClient:
         )
         return [departure.as_dict() for departure in departures]
 
+    async def async_get_timetable_departures(
+        self,
+        *,
+        stop_id: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return next departures from the T2C timetable API."""
+        data = await self._async_get_timetable(stop_id, limit)
+        departures = _parse_timetable_departures(data, limit)
+        _LOGGER.debug(
+            "Parsed %s T2C timetable departures for stop=%s",
+            len(departures),
+            stop_id,
+        )
+        return [departure.as_dict() for departure in departures]
+
     async def async_get_stop_messages(
         self,
         *,
@@ -299,9 +330,7 @@ class T2CClient:
         limit: int,
     ) -> list[dict[str, Any]]:
         """Return information messages from the T2C timetable API."""
-        query = urlencode({"_stop_code": stop_id, "_limit": limit})
-        url = f"{QR_TIMETABLE_API_URL}?{query}"
-        data = await self._async_get_json(url)
+        data = await self._async_get_timetable(stop_id, limit)
         messages = _parse_timetable_messages(data)
         _LOGGER.debug(
             "Parsed %s T2C timetable messages for stop=%s",
@@ -322,6 +351,11 @@ class T2CClient:
             line_id,
         )
         return [alert.as_dict() for alert in alerts]
+
+    async def _async_get_timetable(self, stop_id: str, limit: int) -> dict[str, Any]:
+        """Fetch the T2C timetable API for a stop."""
+        query = urlencode({"_stop_code": stop_id, "_limit": limit})
+        return await self._async_get_json(f"{QR_TIMETABLE_API_URL}?{query}")
 
     async def _async_get_gtfs(self) -> _GtfsIndex:
         """Return a cached static GTFS index."""
@@ -429,6 +463,7 @@ def _parse_gtfs_rt_trip_updates(
                     destination=gtfs.trip_headsigns.get(trip.trip_id),
                     due_at=due_at,
                     minutes=max(0, round((due_ts - now_ts) / 60)),
+                    realtime=True,
                     trip_id=trip.trip_id or None,
                     vehicle_id=trip_update.vehicle.id or None,
                 )
@@ -462,6 +497,46 @@ def _parse_timetable_messages(data: dict[str, Any]) -> list[T2CMessage]:
         )
 
     return messages
+
+
+def _parse_timetable_departures(
+    data: dict[str, Any],
+    limit: int,
+) -> list[T2CDeparture]:
+    """Parse departures from the T2C timetable JSON API."""
+    departures: list[T2CDeparture] = []
+    now_ts = int(time.time())
+
+    for item in data.get("timetable", {}).get("timetable", []):
+        due_at = _parse_t2c_datetime(
+            item.get("datetime_estimated") or item.get("datetime")
+        )
+        if due_at is None:
+            continue
+
+        scheduled_at = _parse_t2c_datetime(item.get("datetime"))
+        estimated_at = _parse_t2c_datetime(item.get("datetime_estimated"))
+        minutes = max(0, round((int(due_at.timestamp()) - now_ts) / 60))
+        status = item.get("departure_status")
+        theoretical = item.get("theorique")
+
+        departures.append(
+            T2CDeparture(
+                route_id=item.get("line_id"),
+                route_name=item.get("line_id"),
+                stop_id=data.get("referential_parameter", {}).get("stop_id", ""),
+                destination=item.get("destination"),
+                due_at=due_at,
+                minutes=minutes,
+                realtime=estimated_at is not None and theoretical is False,
+                scheduled_at=scheduled_at,
+                estimated_at=estimated_at,
+                status=status,
+                theoretical=theoretical,
+            )
+        )
+
+    return departures[:limit]
 
 
 def _parse_line_alerts(data: list[dict[str, Any]]) -> list[T2CLineAlert]:
@@ -703,6 +778,19 @@ def _extract_stop_time(stop_time_update: Any) -> int | None:
     if stop_time_update.HasField("arrival") and stop_time_update.arrival.time:
         return stop_time_update.arrival.time
     return None
+
+
+def _parse_t2c_datetime(value: Any) -> datetime | None:
+    """Parse a T2C local datetime value."""
+    if not isinstance(value, str):
+        return None
+
+    try:
+        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+    return parsed.replace(tzinfo=T2C_TIME_ZONE)
 
 
 def _natural_key(value: str) -> list[int | str]:
