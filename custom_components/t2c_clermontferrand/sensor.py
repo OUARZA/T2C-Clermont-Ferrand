@@ -301,7 +301,7 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         """Return the departure display value."""
         departure = self._departure
         if departure is None:
-            return None
+            return "Fin de service"
 
         if departure.get("status") == "cancelled":
             time_value = _format_departure_time(
@@ -364,8 +364,8 @@ class T2CDepartureInfoSensor(T2CBaseSensor):
         """Return the departure information."""
         departure = self._departure
         if departure is None:
-            return None
-        return _format_departure_info(departure)
+            return "Aucune info"
+        return _format_departure_info(departure) or "Aucune info"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
