@@ -14,6 +14,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    ATTR_AFFECTED_ROUTES,
+    ATTR_ALERTS,
     ATTR_DEPARTURES,
     ATTR_DUE_AT,
     ATTR_DIRECTION,
@@ -28,7 +30,10 @@ from .const import (
     ATTR_STOP,
     ATTR_LINE_REFS,
     ATTR_STOP_REFS,
+    ATTR_LEVEL,
+    ATTR_PRIORITY,
     ATTR_TRIP_ID,
+    ATTR_UPDATED_AT,
     ATTR_VALID_FROM,
     ATTR_VALID_UNTIL,
     CONF_DEPARTURE_LIMIT,
@@ -58,6 +63,7 @@ async def async_setup_entry(
             T2CNextPassageSensor(coordinator, entry),
             T2CUpcomingPassagesSensor(coordinator, entry),
             T2CInformationMessagesSensor(coordinator, entry),
+            T2CLineAlertsSensor(coordinator, entry),
             *departure_sensors,
         ]
     )
@@ -134,6 +140,7 @@ class T2CNextPassageSensor(T2CBaseSensor):
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
             ATTR_MESSAGES: _messages(self.coordinator),
+            ATTR_ALERTS: _alerts(self.coordinator),
             ATTR_RAW_PASSAGES: data,
         }
 
@@ -167,6 +174,7 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
             ATTR_MESSAGES: _messages(self.coordinator),
+            ATTR_ALERTS: _alerts(self.coordinator),
             ATTR_RAW_PASSAGES: data,
         }
 
@@ -207,6 +215,44 @@ class T2CInformationMessagesSensor(T2CBaseSensor):
             ATTR_VALID_UNTIL: first.get("valid_until"),
             ATTR_LINE_REFS: first.get("line_refs"),
             ATTR_STOP_REFS: first.get("stop_refs"),
+        }
+
+
+class T2CLineAlertsSensor(T2CBaseSensor):
+    """Sensor exposing line disruptions from the T2C alerts API."""
+
+    _attr_name = "Perturbations ligne"
+
+    def __init__(
+        self,
+        coordinator: T2CDataUpdateCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, "line_alerts")
+
+    @property
+    def native_value(self) -> int:
+        """Return available line alert count."""
+        return len(_alerts(self.coordinator))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return line alert details."""
+        alerts = _alerts(self.coordinator)
+        first = alerts[0] if alerts else {}
+
+        return {
+            ATTR_LINE: self._entry.data[CONF_LINE_NAME],
+            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
+            ATTR_ALERTS: alerts,
+            "title": first.get("title"),
+            "text": first.get("text"),
+            "type": first.get("type"),
+            ATTR_LEVEL: first.get("disruption_level"),
+            ATTR_PRIORITY: first.get("priority"),
+            ATTR_UPDATED_AT: first.get("updated_at"),
+            ATTR_AFFECTED_ROUTES: first.get("affected_routes"),
         }
 
 
@@ -306,3 +352,9 @@ def _messages(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
     """Return information messages from coordinator data."""
     data = coordinator.data or {}
     return data.get("messages", [])
+
+
+def _alerts(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
+    """Return line alerts from coordinator data."""
+    data = coordinator.data or {}
+    return data.get("alerts", [])

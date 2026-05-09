@@ -69,13 +69,23 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
             _LOGGER.debug("T2C information messages update failed", exc_info=True)
             messages = []
 
+        try:
+            alerts = await self.client.async_get_line_alerts(
+                self.entry.data[CONF_LINE_ID],
+            )
+        except T2CError:
+            _LOGGER.debug("T2C line alerts update failed", exc_info=True)
+            alerts = []
+
         _LOGGER.debug(
-            "Coordinator fetched %s departures and %s messages for stop %s",
+            "Coordinator fetched %s departures, %s messages and %s alerts for stop %s",
             len(departures),
             len(messages),
+            len(alerts),
             self.entry.data[CONF_STOP_ID],
         )
         return {
             "departures": departures,
             "messages": messages,
+            "alerts": alerts,
         }

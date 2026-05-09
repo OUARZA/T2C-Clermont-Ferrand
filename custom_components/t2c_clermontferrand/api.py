@@ -6,6 +6,7 @@ import asyncio
 import csv
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from io import BytesIO, TextIOWrapper
 import logging
 import re
@@ -19,6 +20,7 @@ from aiohttp import ClientError, ClientResponseError, ClientSession
 from .const import (
     DATASET_API_URL,
     GTFS_RT_TRIP_UPDATES_URL,
+    LINE_ALERTS_API_URL,
     QR_TIMETABLE_API_URL,
 )
 
@@ -158,6 +160,39 @@ class T2CMessage:
         }
 
 
+@dataclass(slots=True, frozen=True)
+class T2CLineAlert:
+    """A line disruption returned by the T2C alerts API."""
+
+    alert_id: str
+    alert_type: str
+    title: str
+    text: str
+    start_datetime: str | None
+    end_datetime: str | None
+    priority: int | None
+    affected_routes: list[str]
+    disruption_level: str | None
+    created_at: str | None
+    updated_at: str | None
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a serializable representation."""
+        return {
+            "id": self.alert_id,
+            "type": self.alert_type,
+            "title": self.title,
+            "text": self.text,
+            "start_datetime": self.start_datetime,
+            "end_datetime": self.end_datetime,
+            "priority": self.priority,
+            "affected_routes": self.affected_routes,
+            "disruption_level": self.disruption_level,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
 @dataclass(slots=True)
 class _GtfsIndex:
     """Parsed static GTFS index used for selectors and trip metadata."""
@@ -275,6 +310,19 @@ class T2CClient:
         )
         return [message.as_dict() for message in messages]
 
+    async def async_get_line_alerts(self, line_id: str) -> list[dict[str, Any]]:
+        """Return traffic disruptions for a line from the T2C alerts API."""
+        query = urlencode({"type": "Trafic"})
+        url = f"{LINE_ALERTS_API_URL.format(line_id=line_id)}?{query}"
+        data = await self._async_get_json_list(url)
+        alerts = _parse_line_alerts(data)
+        _LOGGER.debug(
+            "Parsed %s T2C line alerts for line=%s",
+            len(alerts),
+            line_id,
+        )
+        return [alert.as_dict() for alert in alerts]
+
     async def _async_get_gtfs(self) -> _GtfsIndex:
         """Return a cached static GTFS index."""
         now = time.monotonic()
@@ -300,6 +348,20 @@ class T2CClient:
                 return await response.json()
         except (ClientError, ClientResponseError, TimeoutError) as err:
             raise T2CConnectionError(f"Unable to fetch JSON from {url}") from err
+
+    async def _async_get_json_list(self, url: str) -> list[dict[str, Any]]:
+        """Fetch a JSON list from an official data endpoint."""
+        try:
+            async with self._session.get(url, timeout=HTTP_TIMEOUT) as response:
+                response.raise_for_status()
+                data = await response.json()
+        except (ClientError, ClientResponseError, TimeoutError) as err:
+            raise T2CConnectionError(f"Unable to fetch JSON from {url}") from err
+
+        if not isinstance(data, list):
+            raise T2CDataError(f"Unexpected JSON payload from {url}")
+
+        return data
 
     async def _async_get_bytes(self, url: str) -> bytes:
         """Fetch bytes from an official data endpoint."""
@@ -400,6 +462,36 @@ def _parse_timetable_messages(data: dict[str, Any]) -> list[T2CMessage]:
         )
 
     return messages
+
+
+def _parse_line_alerts(data: list[dict[str, Any]]) -> list[T2CLineAlert]:
+    """Parse line disruption alerts from the T2C alerts API."""
+    alerts: list[T2CLineAlert] = []
+
+    for item in data:
+        title = item.get("title")
+        text = item.get("text")
+
+        if not title or not text:
+            continue
+
+        alerts.append(
+            T2CLineAlert(
+                alert_id=str(item.get("id") or ""),
+                alert_type=str(item.get("type") or ""),
+                title=str(title),
+                text=_html_to_text(str(text)),
+                start_datetime=item.get("start_datetime"),
+                end_datetime=item.get("end_datetime"),
+                priority=item.get("priority"),
+                affected_routes=list(item.get("affected_routes") or []),
+                disruption_level=item.get("disruption_level"),
+                created_at=item.get("created_at"),
+                updated_at=item.get("updated_at"),
+            )
+        )
+
+    return alerts
 
 
 def _extract_static_gtfs_url(metadata: dict[str, Any]) -> str:
@@ -619,3 +711,38 @@ def _natural_key(value: str) -> list[int | str]:
         int(part) if part.isdigit() else part.lower()
         for part in re.split(r"(\d+)", value)
     ]
+
+
+def _html_to_text(value: str) -> str:
+    """Convert the limited HTML returned by T2C alerts to plain text."""
+    parser = _HTMLTextExtractor()
+    parser.feed(value)
+    parser.close()
+    return re.sub(r"\s+", " ", parser.text).strip()
+
+
+class _HTMLTextExtractor(HTMLParser):
+    """Small HTML text extractor for T2C alert bodies."""
+
+    def __init__(self) -> None:
+        """Initialize the parser."""
+        super().__init__()
+        self._parts: list[str] = []
+
+    @property
+    def text(self) -> str:
+        """Return extracted text."""
+        return "".join(self._parts)
+
+    def handle_data(self, data: str) -> None:
+        """Handle text nodes."""
+        self._parts.append(data)
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        """Handle tags that should add spacing."""
+        if tag in {"br", "p", "li"}:
+            self._parts.append(" ")
