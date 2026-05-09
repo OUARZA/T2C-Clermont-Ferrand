@@ -5,7 +5,8 @@ Intégration Home Assistant personnalisée pour afficher les prochains passages 
 Cette version utilise les données ouvertes officielles Clermont Auvergne Métropole :
 
 - GTFS statique pour charger les lignes et les arrêts dans le flux de configuration ;
-- GTFS-RT Trip Updates pour les prochains départs en temps réel.
+- GTFS-RT Trip Updates pour les prochains départs en temps réel ;
+- l'API JSON T2C QR Code pour les messages d'information renvoyés avec l'arrêt sélectionné.
 
 ## Installation via HACS
 
@@ -47,6 +48,7 @@ L'intégration crée :
 
 - un capteur `Prochain passage`, dont l'état est le temps d'attente du prochain départ en minutes ;
 - un capteur `Passages disponibles`, dont les attributs contiennent une liste `departures` prête pour un affichage en tableau ;
+- un capteur `Messages d'information`, dont les attributs exposent les messages T2C renvoyés par l'API, avec leur périmètre `scope` (`network`, `line`, `stop` ou `line_and_stop`) ;
 - des capteurs `Passage 1` à `Passage X`, exposés comme timestamps Home Assistant, selon le nombre choisi pendant la configuration.
 
 ## Exemple d'affichage

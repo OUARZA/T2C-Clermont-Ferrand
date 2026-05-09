@@ -24,7 +24,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class T2CDataUpdateCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
+class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, Any]]]]):
     """Coordinate polling of T2C GTFS-Realtime departures."""
 
     def __init__(
@@ -43,25 +43,39 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
         self.entry = entry
         self.client = client
 
-    async def _async_update_data(self) -> list[dict[str, Any]]:
+    async def _async_update_data(self) -> dict[str, list[dict[str, Any]]]:
         """Fetch latest departure data."""
+        departure_limit = self.entry.data.get(
+            CONF_DEPARTURE_LIMIT,
+            DEFAULT_DEPARTURE_LIMIT,
+        )
         try:
-            data = await self.client.async_get_next_departures(
+            departures = await self.client.async_get_next_departures(
                 stop_id=self.entry.data[CONF_STOP_ID],
                 route_id=self.entry.data.get(CONF_LINE_ID),
                 direction_id=self.entry.data.get(CONF_DIRECTION_ID),
-                limit=self.entry.data.get(
-                    CONF_DEPARTURE_LIMIT,
-                    DEFAULT_DEPARTURE_LIMIT,
-                ),
+                limit=departure_limit,
             )
         except T2CError as err:
             _LOGGER.debug("T2C coordinator update failed", exc_info=True)
             raise UpdateFailed(str(err)) from err
 
+        try:
+            messages = await self.client.async_get_stop_messages(
+                stop_id=self.entry.data[CONF_STOP_ID],
+                limit=departure_limit,
+            )
+        except T2CError:
+            _LOGGER.debug("T2C information messages update failed", exc_info=True)
+            messages = []
+
         _LOGGER.debug(
-            "Coordinator fetched %s departures for stop %s",
-            len(data),
+            "Coordinator fetched %s departures and %s messages for stop %s",
+            len(departures),
+            len(messages),
             self.entry.data[CONF_STOP_ID],
         )
-        return data
+        return {
+            "departures": departures,
+            "messages": messages,
+        }

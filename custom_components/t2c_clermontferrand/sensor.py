@@ -19,12 +19,18 @@ from .const import (
     ATTR_DIRECTION,
     ATTR_DESTINATION,
     ATTR_LINE,
+    ATTR_MESSAGES,
     ATTR_MINUTES,
     ATTR_NEXT_PASSAGES,
     ATTR_RAW_PASSAGES,
     ATTR_REALTIME,
+    ATTR_SCOPE,
     ATTR_STOP,
+    ATTR_LINE_REFS,
+    ATTR_STOP_REFS,
     ATTR_TRIP_ID,
+    ATTR_VALID_FROM,
+    ATTR_VALID_UNTIL,
     CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_NAME,
     CONF_LINE_NAME,
@@ -51,6 +57,7 @@ async def async_setup_entry(
         [
             T2CNextPassageSensor(coordinator, entry),
             T2CUpcomingPassagesSensor(coordinator, entry),
+            T2CInformationMessagesSensor(coordinator, entry),
             *departure_sensors,
         ]
     )
@@ -104,7 +111,7 @@ class T2CNextPassageSensor(T2CBaseSensor):
     @property
     def native_value(self):
         """Return next passage in minutes."""
-        data = self.coordinator.data or []
+        data = _departures(self.coordinator)
         if not data:
             return None
 
@@ -114,7 +121,7 @@ class T2CNextPassageSensor(T2CBaseSensor):
     @property
     def extra_state_attributes(self):
         """Return extra state attributes."""
-        data = self.coordinator.data or []
+        data = _departures(self.coordinator)
         first = data[0] if data else {}
 
         return {
@@ -126,6 +133,7 @@ class T2CNextPassageSensor(T2CBaseSensor):
             ATTR_REALTIME: first.get("realtime"),
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
+            ATTR_MESSAGES: _messages(self.coordinator),
             ATTR_RAW_PASSAGES: data,
         }
 
@@ -146,19 +154,59 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
     @property
     def native_value(self) -> int:
         """Return available departure count."""
-        return len(self.coordinator.data or [])
+        return len(_departures(self.coordinator))
 
     @property
     def extra_state_attributes(self):
         """Return all upcoming departures."""
-        data = self.coordinator.data or []
+        data = _departures(self.coordinator)
         return {
             ATTR_LINE: self._entry.data[CONF_LINE_NAME],
             ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
             ATTR_STOP: self._entry.data[CONF_STOP_NAME],
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
+            ATTR_MESSAGES: _messages(self.coordinator),
             ATTR_RAW_PASSAGES: data,
+        }
+
+
+class T2CInformationMessagesSensor(T2CBaseSensor):
+    """Sensor exposing information messages from T2C timetable API."""
+
+    _attr_name = "Messages d'information"
+
+    def __init__(
+        self,
+        coordinator: T2CDataUpdateCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry, "information_messages")
+
+    @property
+    def native_value(self) -> int:
+        """Return available information message count."""
+        return len(_messages(self.coordinator))
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return information message details."""
+        messages = _messages(self.coordinator)
+        first = messages[0] if messages else {}
+
+        return {
+            ATTR_LINE: self._entry.data[CONF_LINE_NAME],
+            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
+            ATTR_STOP: self._entry.data[CONF_STOP_NAME],
+            ATTR_MESSAGES: messages,
+            "title": first.get("title"),
+            "content": first.get("content"),
+            ATTR_SCOPE: first.get("scope"),
+            ATTR_VALID_FROM: first.get("valid_from"),
+            ATTR_VALID_UNTIL: first.get("valid_until"),
+            ATTR_LINE_REFS: first.get("line_refs"),
+            ATTR_STOP_REFS: first.get("stop_refs"),
         }
 
 
@@ -205,7 +253,7 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
     @property
     def _departure(self) -> dict[str, Any] | None:
         """Return the departure represented by this sensor."""
-        data = self.coordinator.data or []
+        data = _departures(self.coordinator)
         if self._index >= len(data):
             return None
         return data[self._index]
@@ -246,3 +294,15 @@ def _format_minutes(value: Any) -> str | None:
     if value == 0:
         return "A l'approche"
     return f"{value} min"
+
+
+def _departures(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
+    """Return departures from coordinator data."""
+    data = coordinator.data or {}
+    return data.get("departures", [])
+
+
+def _messages(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
+    """Return information messages from coordinator data."""
+    data = coordinator.data or {}
+    return data.get("messages", [])

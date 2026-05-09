@@ -11,11 +11,16 @@ import logging
 import re
 import time
 from typing import Any
+from urllib.parse import urlencode
 import zipfile
 
 from aiohttp import ClientError, ClientResponseError, ClientSession
 
-from .const import DATASET_API_URL, GTFS_RT_TRIP_UPDATES_URL
+from .const import (
+    DATASET_API_URL,
+    GTFS_RT_TRIP_UPDATES_URL,
+    QR_TIMETABLE_API_URL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -113,6 +118,43 @@ class T2CDeparture:
             "label": self.label,
             "trip_id": self.trip_id,
             "vehicle_id": self.vehicle_id,
+        }
+
+
+@dataclass(slots=True, frozen=True)
+class T2CMessage:
+    """An information message returned by the T2C timetable API."""
+
+    message_id: str
+    title: str
+    content: str
+    valid_from: str | None
+    valid_until: str | None
+    line_refs: list[str]
+    stop_refs: list[str]
+
+    @property
+    def scope(self) -> str:
+        """Return the message scope inferred from references."""
+        if self.line_refs and self.stop_refs:
+            return "line_and_stop"
+        if self.line_refs:
+            return "line"
+        if self.stop_refs:
+            return "stop"
+        return "network"
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a serializable representation."""
+        return {
+            "id": self.message_id,
+            "title": self.title,
+            "content": self.content,
+            "valid_from": self.valid_from,
+            "valid_until": self.valid_until,
+            "line_refs": self.line_refs,
+            "stop_refs": self.stop_refs,
+            "scope": self.scope,
         }
 
 
@@ -215,6 +257,24 @@ class T2CClient:
         )
         return [departure.as_dict() for departure in departures]
 
+    async def async_get_stop_messages(
+        self,
+        *,
+        stop_id: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Return information messages from the T2C timetable API."""
+        query = urlencode({"_stop_code": stop_id, "_limit": limit})
+        url = f"{QR_TIMETABLE_API_URL}?{query}"
+        data = await self._async_get_json(url)
+        messages = _parse_timetable_messages(data)
+        _LOGGER.debug(
+            "Parsed %s T2C timetable messages for stop=%s",
+            len(messages),
+            stop_id,
+        )
+        return [message.as_dict() for message in messages]
+
     async def _async_get_gtfs(self) -> _GtfsIndex:
         """Return a cached static GTFS index."""
         now = time.monotonic()
@@ -314,6 +374,32 @@ def _parse_gtfs_rt_trip_updates(
 
     departures.sort(key=lambda departure: departure.due_at)
     return departures[:limit]
+
+
+def _parse_timetable_messages(data: dict[str, Any]) -> list[T2CMessage]:
+    """Parse information messages from the T2C timetable JSON API."""
+    messages: list[T2CMessage] = []
+
+    for item in data.get("message", []):
+        title = item.get("title")
+        content = item.get("content")
+
+        if not title or not content:
+            continue
+
+        messages.append(
+            T2CMessage(
+                message_id=str(item.get("id") or ""),
+                title=str(title),
+                content=str(content),
+                valid_from=item.get("valid_start_time"),
+                valid_until=item.get("valid_until_time"),
+                line_refs=list(item.get("list_line_ref") or []),
+                stop_refs=list(item.get("list_stop_point_ref") or []),
+            )
+        )
+
+    return messages
 
 
 def _extract_static_gtfs_url(metadata: dict[str, Any]) -> str:
