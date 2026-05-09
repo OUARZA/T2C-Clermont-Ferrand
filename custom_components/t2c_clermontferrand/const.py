@@ -14,6 +14,7 @@ GTFS_RT_TRIP_UPDATES_URL = (
 )
 QR_TIMETABLE_API_URL = "https://qrcode.t2c.fr/api/timetable"
 LINE_ALERTS_API_URL = "https://api.t2c.fr/siv/alerts/by-line/{line_id}"
+NETWORK_MESSAGES_API_URL = "https://api.t2c.fr/siv/alerts"
 
 CONF_LINE_NAME = "line_name"
 CONF_LINE_ID = "line_id"

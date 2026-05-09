@@ -17,6 +17,7 @@ async def async_get_config_entry_diagnostics(
     """Return diagnostics for a config entry."""
     domain_data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     coordinator = getattr(domain_data, "coordinator", None)
+    network_coordinator = getattr(domain_data, "network_coordinator", None)
     client = getattr(domain_data, "client", None)
     gtfs = getattr(client, "_gtfs", None)
 
@@ -30,6 +31,17 @@ async def async_get_config_entry_diagnostics(
             "last_update_success": getattr(coordinator, "last_update_success", None),
             "last_exception": repr(getattr(coordinator, "last_exception", None)),
             "data": getattr(coordinator, "data", None),
+        },
+        "network_coordinator": {
+            "last_update_success": getattr(
+                network_coordinator,
+                "last_update_success",
+                None,
+            ),
+            "last_exception": repr(
+                getattr(network_coordinator, "last_exception", None)
+            ),
+            "data": getattr(network_coordinator, "data", None),
         },
         "gtfs": {
             "loaded": gtfs is not None,

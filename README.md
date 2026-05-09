@@ -51,7 +51,7 @@ L'intégration crée :
 - un capteur `Prochain passage`, dont l'état est le temps d'attente du prochain départ en minutes ;
 - un capteur `Passages disponibles`, dont les attributs contiennent une liste `departures` prête pour un affichage en tableau ;
 - un capteur `Perturbations ligne`, dont les attributs contiennent les alertes trafic de la ligne ;
-- un capteur `Messages d'information`, dont les attributs exposent les messages T2C renvoyés par l'API, avec leur périmètre `scope` (`network`, `line`, `stop` ou `line_and_stop`) ;
+- un capteur global `Informations réseau`, rattaché à l'appareil `T2C - Informations réseau`, pour éviter de dupliquer les informations générales sur chaque arrêt ;
 - des capteurs `Passage 1` à `Passage X`, où `Passage 1` affiche le temps restant et les suivants affichent l'heure T2C, avec l'information de statut en attribut.
 
 ## Exemple d'affichage

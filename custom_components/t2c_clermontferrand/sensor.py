@@ -29,11 +29,8 @@ from .const import (
     ATTR_RAW_PASSAGES,
     ATTR_REALTIME,
     ATTR_SCHEDULED_AT,
-    ATTR_SCOPE,
     ATTR_STATUS,
     ATTR_STOP,
-    ATTR_LINE_REFS,
-    ATTR_STOP_REFS,
     ATTR_LEVEL,
     ATTR_PRIORITY,
     ATTR_TRIP_ID,
@@ -48,7 +45,7 @@ from .const import (
     DEFAULT_DEPARTURE_LIMIT,
     DOMAIN,
 )
-from .coordinator import T2CDataUpdateCoordinator
+from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
 
 async def async_setup_entry(
@@ -57,7 +54,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up T2C sensors."""
-    coordinator = hass.data[DOMAIN][entry.entry_id].coordinator
+    runtime_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = runtime_data.coordinator
+    network_coordinator = runtime_data.network_coordinator
     departure_limit = entry.data.get(CONF_DEPARTURE_LIMIT, DEFAULT_DEPARTURE_LIMIT)
     departure_sensors = [
         T2CDepartureTimeSensor(coordinator, entry, index)
@@ -67,8 +66,8 @@ async def async_setup_entry(
         [
             T2CNextPassageSensor(coordinator, entry),
             T2CUpcomingPassagesSensor(coordinator, entry),
-            T2CInformationMessagesSensor(coordinator, entry),
             T2CLineAlertsSensor(coordinator, entry),
+            T2CNetworkInformationSensor(network_coordinator),
             *departure_sensors,
         ]
     )
@@ -184,42 +183,50 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
         }
 
 
-class T2CInformationMessagesSensor(T2CBaseSensor):
-    """Sensor exposing information messages from T2C timetable API."""
+class T2CNetworkInformationSensor(
+    CoordinatorEntity[T2CNetworkCoordinator],
+    SensorEntity,
+):
+    """Sensor exposing global T2C network information."""
 
-    _attr_name = "Messages d'information"
+    _attr_has_entity_name = True
+    _attr_name = "Informations réseau"
+    _attr_unique_id = f"{DOMAIN}_network_information"
 
-    def __init__(
-        self,
-        coordinator: T2CDataUpdateCoordinator,
-        entry: ConfigEntry,
-    ) -> None:
+    def __init__(self, coordinator: T2CNetworkCoordinator) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, "information_messages")
+        super().__init__(coordinator)
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        return {
+            "identifiers": {(DOMAIN, "network")},
+            "name": "T2C - Informations réseau",
+            "manufacturer": "T2C Clermont-Ferrand",
+            "model": "Network information",
+        }
 
     @property
     def native_value(self) -> int:
-        """Return available information message count."""
-        return len(_messages(self.coordinator))
+        """Return available network message count."""
+        return len(_network_messages(self.coordinator))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return information message details."""
-        messages = _messages(self.coordinator)
+        """Return network message details."""
+        messages = _network_messages(self.coordinator)
         first = messages[0] if messages else {}
 
         return {
-            ATTR_LINE: self._entry.data[CONF_LINE_NAME],
-            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
-            ATTR_STOP: self._entry.data[CONF_STOP_NAME],
             ATTR_MESSAGES: messages,
             "title": first.get("title"),
-            "content": first.get("content"),
-            ATTR_SCOPE: first.get("scope"),
-            ATTR_VALID_FROM: first.get("valid_from"),
-            ATTR_VALID_UNTIL: first.get("valid_until"),
-            ATTR_LINE_REFS: first.get("line_refs"),
-            ATTR_STOP_REFS: first.get("stop_refs"),
+            "text": first.get("text"),
+            "type": first.get("type"),
+            ATTR_LEVEL: first.get("disruption_level"),
+            ATTR_PRIORITY: first.get("priority"),
+            ATTR_UPDATED_AT: first.get("updated_at"),
+            ATTR_AFFECTED_ROUTES: first.get("affected_routes"),
         }
 
 
@@ -389,6 +396,14 @@ def _active_departures(
 
 def _messages(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
     """Return information messages from coordinator data."""
+    data = coordinator.data or {}
+    return data.get("messages", [])
+
+
+def _network_messages(
+    coordinator: T2CNetworkCoordinator,
+) -> list[dict[str, Any]]:
+    """Return global network messages from coordinator data."""
     data = coordinator.data or {}
     return data.get("messages", [])
 

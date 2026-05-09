@@ -86,3 +86,32 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
             "messages": messages,
             "alerts": alerts,
         }
+
+
+class T2CNetworkCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, Any]]]]):
+    """Coordinate polling of global T2C network information."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: T2CClient,
+    ) -> None:
+        """Initialize the coordinator."""
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_network",
+            update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL_MINUTES),
+        )
+        self.client = client
+
+    async def _async_update_data(self) -> dict[str, list[dict[str, Any]]]:
+        """Fetch latest network information."""
+        try:
+            messages = await self.client.async_get_network_messages()
+        except T2CError as err:
+            _LOGGER.debug("T2C network messages update failed", exc_info=True)
+            raise UpdateFailed(str(err)) from err
+
+        _LOGGER.debug("Network coordinator fetched %s messages", len(messages))
+        return {"messages": messages}

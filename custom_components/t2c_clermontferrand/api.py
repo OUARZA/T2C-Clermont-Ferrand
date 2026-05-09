@@ -22,6 +22,7 @@ from .const import (
     DATASET_API_URL,
     GTFS_RT_TRIP_UPDATES_URL,
     LINE_ALERTS_API_URL,
+    NETWORK_MESSAGES_API_URL,
     QR_TIMETABLE_API_URL,
 )
 
@@ -351,6 +352,13 @@ class T2CClient:
             line_id,
         )
         return [alert.as_dict() for alert in alerts]
+
+    async def async_get_network_messages(self) -> list[dict[str, Any]]:
+        """Return network information from the T2C alerts API."""
+        data = await self._async_get_json_list(NETWORK_MESSAGES_API_URL)
+        messages = _parse_line_alerts(data)
+        _LOGGER.debug("Parsed %s T2C network messages", len(messages))
+        return [message.as_dict() for message in messages]
 
     async def _async_get_timetable(self, stop_id: str, limit: int) -> dict[str, Any]:
         """Fetch the T2C timetable API for a stop."""
