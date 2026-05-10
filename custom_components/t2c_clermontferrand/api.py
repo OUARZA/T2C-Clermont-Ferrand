@@ -54,6 +54,7 @@ class T2CRoute:
     short_name: str
     long_name: str
     color: str | None = None
+    text_color: str | None = None
 
     @property
     def label(self) -> str:
@@ -106,6 +107,8 @@ class T2CDeparture:
     status: str | None = None
     theoretical: bool | None = None
     info: str | None = None
+    route_color: str | None = None
+    route_text_color: str | None = None
 
     @property
     def label(self) -> str:
@@ -138,6 +141,8 @@ class T2CDeparture:
             "status": self.status,
             "theoretical": self.theoretical,
             "info": self.info,
+            "route_color": self.route_color,
+            "route_text_color": self.route_text_color,
         }
 
 
@@ -318,7 +323,8 @@ class T2CClient:
     ) -> list[dict[str, Any]]:
         """Return next departures from the T2C timetable API."""
         data = await self._async_get_timetable(stop_id, limit)
-        departures = _parse_timetable_departures(data, limit)
+        gtfs = await self._async_get_gtfs()
+        departures = _parse_timetable_departures(data, gtfs, limit)
         _LOGGER.debug(
             "Parsed %s T2C timetable departures for stop=%s",
             len(departures),
@@ -469,6 +475,8 @@ def _parse_gtfs_rt_trip_updates(
                 T2CDeparture(
                     route_id=trip_route_id,
                     route_name=route.short_name if route else None,
+                    route_color=route.color if route else None,
+                    route_text_color=route.text_color if route else None,
                     stop_id=stop_id,
                     destination=gtfs.trip_headsigns.get(trip.trip_id),
                     due_at=due_at,
@@ -511,6 +519,7 @@ def _parse_timetable_messages(data: dict[str, Any]) -> list[T2CMessage]:
 
 def _parse_timetable_departures(
     data: dict[str, Any],
+    gtfs: _GtfsIndex,
     limit: int,
 ) -> list[T2CDeparture]:
     """Parse departures from the T2C timetable JSON API."""
@@ -530,11 +539,15 @@ def _parse_timetable_departures(
         status = item.get("departure_status")
         theoretical = item.get("theorique")
         info = item.get("info")
+        route_id = item.get("line_id")
+        route = gtfs.routes.get(route_id or "")
 
         departures.append(
             T2CDeparture(
-                route_id=item.get("line_id"),
-                route_name=item.get("line_id"),
+                route_id=route_id,
+                route_name=route.short_name if route else route_id,
+                route_color=route.color if route else None,
+                route_text_color=route.text_color if route else None,
                 stop_id=data.get("referential_parameter", {}).get("stop_id", ""),
                 destination=item.get("destination"),
                 due_at=due_at,
@@ -656,10 +669,21 @@ def _read_routes(archive: zipfile.ZipFile) -> dict[str, T2CRoute]:
             route_id=row["route_id"],
             short_name=row.get("route_short_name") or row["route_id"],
             long_name=row.get("route_long_name") or "",
-            color=row.get("route_color") or None,
+            color=_format_hex_color(row.get("route_color")),
+            text_color=_format_hex_color(row.get("route_text_color")),
         )
         for row in _read_csv(archive, "routes.txt")
     }
+
+
+def _format_hex_color(value: str | None) -> str | None:
+    """Return a CSS-ready hex color from a GTFS color value."""
+    if not value:
+        return None
+    value = value.strip()
+    if not value:
+        return None
+    return value if value.startswith("#") else f"#{value}"
 
 
 def _read_stops(archive: zipfile.ZipFile) -> dict[str, str]:

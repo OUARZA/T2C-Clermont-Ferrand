@@ -30,7 +30,9 @@ from .const import (
     ATTR_NEXT_PASSAGES,
     ATTR_RAW_PASSAGES,
     ATTR_REALTIME,
+    ATTR_ROUTE_COLOR,
     ATTR_ROUTE_ID,
+    ATTR_ROUTE_TEXT_COLOR,
     ATTR_SCHEDULED_AT,
     ATTR_STATUS,
     ATTR_STOP,
@@ -159,6 +161,8 @@ class T2CNextPassageSensor(T2CBaseSensor):
 
         return {
             ATTR_LINE: self._stop_data[CONF_LINE_NAME],
+            ATTR_ROUTE_COLOR: first.get("route_color"),
+            ATTR_ROUTE_TEXT_COLOR: first.get("route_text_color"),
             ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_DESTINATION: first.get("destination"),
@@ -199,6 +203,8 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
         data = _departures(self.coordinator)
         return {
             ATTR_LINE: self._stop_data[CONF_LINE_NAME],
+            ATTR_ROUTE_COLOR: data[0].get("route_color") if data else None,
+            ATTR_ROUTE_TEXT_COLOR: data[0].get("route_text_color") if data else None,
             ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
@@ -350,6 +356,8 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         return {
             ATTR_LINE: departure.get("route_name") or self._stop_data[CONF_LINE_NAME],
             ATTR_ROUTE_ID: departure.get("route_id"),
+            ATTR_ROUTE_COLOR: departure.get("route_color"),
+            ATTR_ROUTE_TEXT_COLOR: departure.get("route_text_color"),
             ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_STOP_ID: departure.get("stop_id"),
@@ -384,6 +392,8 @@ def _format_departure_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         departures.append(
             {
                 "ligne": item.get("route_name"),
+                "couleur_ligne": item.get("route_color"),
+                "couleur_texte_ligne": item.get("route_text_color"),
                 "destination": item.get("destination"),
                 "depart": _format_departure_time(item, due_at),
                 "info": _format_departure_info(item) or "Aucune info",

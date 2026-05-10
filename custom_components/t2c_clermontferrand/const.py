@@ -32,6 +32,8 @@ MAX_DEPARTURE_LIMIT = 10
 
 ATTR_LINE = "line"
 ATTR_ROUTE_ID = "route_id"
+ATTR_ROUTE_COLOR = "route_color"
+ATTR_ROUTE_TEXT_COLOR = "route_text_color"
 ATTR_DIRECTION = "direction"
 ATTR_STOP = "stop"
 ATTR_STOP_ID = "stop_id"
