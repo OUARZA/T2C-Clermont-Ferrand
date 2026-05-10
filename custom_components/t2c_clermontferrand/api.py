@@ -539,13 +539,13 @@ def _parse_timetable_departures(
         status = item.get("departure_status")
         theoretical = item.get("theorique")
         info = item.get("info")
-        route_id = item.get("line_id")
-        route = gtfs.routes.get(route_id or "")
+        line_ref = item.get("line_id")
+        route = _find_route(gtfs, line_ref)
 
         departures.append(
             T2CDeparture(
-                route_id=route_id,
-                route_name=route.short_name if route else route_id,
+                route_id=route.route_id if route else line_ref,
+                route_name=route.short_name if route else line_ref,
                 route_color=route.color if route else None,
                 route_text_color=route.text_color if route else None,
                 stop_id=data.get("referential_parameter", {}).get("stop_id", ""),
@@ -562,6 +562,20 @@ def _parse_timetable_departures(
         )
 
     return departures[:limit]
+
+
+def _find_route(gtfs: _GtfsIndex, line_ref: str | None) -> T2CRoute | None:
+    """Return a route from a GTFS route ID or public short name."""
+    if not line_ref:
+        return None
+
+    if route := gtfs.routes.get(line_ref):
+        return route
+
+    return next(
+        (route for route in gtfs.routes.values() if route.short_name == line_ref),
+        None,
+    )
 
 
 def _parse_line_alerts(data: list[dict[str, Any]]) -> list[T2CLineAlert]:
