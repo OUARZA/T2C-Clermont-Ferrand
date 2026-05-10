@@ -1,7 +1,9 @@
 {
   "domain": "t2c_clermontferrand",
   "name": "T2C Clermont-Ferrand",
-  "codeowners": [],
+  "codeowners": [
+		"@ouarza"
+	],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/ouarza/t2c_clermontferrand",
@@ -11,5 +13,6 @@
   "requirements": [
     "gtfs-realtime-bindings==1.0.0"
   ],
+  "quality_scale": "silver",
   "version": "0.1.1"
 }

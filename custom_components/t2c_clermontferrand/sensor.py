@@ -281,7 +281,7 @@ class T2CLineAlertsSensor(T2CBaseSensor):
         alerts = _alerts(self.coordinator)
         if not alerts:
             return None
-        return _format_alert_summary(alerts[0])
+        return _format_alert_summary(alerts[0], include_updated_at=True)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -526,11 +526,29 @@ def _format_device_name(stop_data: dict[str, Any]) -> str:
     )
 
 
-def _format_alert_summary(alert: dict[str, Any]) -> str | None:
+def _format_alert_summary(
+    alert: dict[str, Any],
+    *,
+    include_updated_at: bool = False,
+) -> str | None:
     """Format a line alert state as title and message."""
     title = alert.get("title")
     text = alert.get("text")
+    parts = [str(value) for value in (title, text) if value]
 
-    if title and text:
-        return f"{title} - {text}"
-    return title or text
+    if include_updated_at and (updated_at := _format_updated_at(alert)):
+        parts.append(f"Mise à jour le {updated_at}")
+
+    if not parts:
+        return None
+    if len(parts) == 1:
+        return parts[0]
+    return f"{parts[0]} : {' - '.join(parts[1:])}"
+
+
+def _format_updated_at(alert: dict[str, Any]) -> str | None:
+    """Format an alert update timestamp for display."""
+    updated_at = _parse_datetime(alert.get("updated_at"))
+    if updated_at is None:
+        return None
+    return dt_util.as_local(updated_at).strftime("%d/%m/%Y %H:%M")
