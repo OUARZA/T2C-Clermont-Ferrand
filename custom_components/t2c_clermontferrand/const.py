@@ -1,6 +1,7 @@
 """Constants for T2C Clermont-Ferrand."""
 
 DOMAIN = "t2c_clermontferrand"
+GLOBAL_ENTRY_ID = "_global_entry_id"
 
 DATASET_API_URL = (
     "https://www.data.gouv.fr/api/1/datasets/"

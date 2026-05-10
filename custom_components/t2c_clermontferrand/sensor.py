@@ -45,6 +45,7 @@ from .const import (
     CONF_STOP_NAME,
     DEFAULT_DEPARTURE_LIMIT,
     DOMAIN,
+    GLOBAL_ENTRY_ID,
 )
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
@@ -58,6 +59,12 @@ async def async_setup_entry(
     runtime_data = hass.data[DOMAIN][entry.entry_id]
     coordinator = runtime_data.coordinator
     network_coordinator = runtime_data.network_coordinator
+    domain_data = hass.data[DOMAIN]
+    add_global_entities = GLOBAL_ENTRY_ID not in domain_data
+
+    if add_global_entities:
+        domain_data[GLOBAL_ENTRY_ID] = entry.entry_id
+
     departure_limit = entry.data.get(CONF_DEPARTURE_LIMIT, DEFAULT_DEPARTURE_LIMIT)
     departure_sensors = [
         T2CDepartureTimeSensor(coordinator, entry, index)
@@ -67,16 +74,45 @@ async def async_setup_entry(
         T2CDepartureInfoSensor(coordinator, entry, index)
         for index in range(departure_limit)
     ]
-    async_add_entities(
-        [
-            T2CNextPassageSensor(coordinator, entry),
-            T2CUpcomingPassagesSensor(coordinator, entry),
-            T2CLineAlertsSensor(coordinator, entry),
-            T2CNetworkInformationSensor(network_coordinator),
-            *departure_sensors,
-            *departure_info_sensors,
-        ]
-    )
+    entities: list[SensorEntity] = [
+        T2CNextPassageSensor(coordinator, entry),
+        T2CUpcomingPassagesSensor(coordinator, entry),
+        T2CLineAlertsSensor(coordinator, entry),
+        *departure_sensors,
+        *departure_info_sensors,
+    ]
+
+    if add_global_entities:
+        entities.extend(
+            [
+                T2CHubSensor(network_coordinator),
+                T2CNetworkInformationSensor(network_coordinator),
+            ]
+        )
+
+    async_add_entities(entities)
+
+
+class T2CHubSensor(CoordinatorEntity[T2CNetworkCoordinator], SensorEntity):
+    """Sensor creating the T2C hub device."""
+
+    _attr_has_entity_name = True
+    _attr_name = "État"
+    _attr_unique_id = f"{DOMAIN}_hub_status"
+
+    def __init__(self, coordinator: T2CNetworkCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+
+    @property
+    def device_info(self):
+        """Return hub device info."""
+        return _hub_device_info()
+
+    @property
+    def native_value(self) -> str:
+        """Return hub status."""
+        return "OK"
 
 
 class T2CBaseSensor(CoordinatorEntity[T2CDataUpdateCoordinator], SensorEntity):
@@ -103,6 +139,7 @@ class T2CBaseSensor(CoordinatorEntity[T2CDataUpdateCoordinator], SensorEntity):
             "name": _format_device_name(self._entry),
             "manufacturer": "T2C Clermont-Ferrand",
             "model": "GTFS-Realtime Trip Updates",
+            "via_device": (DOMAIN, "hub"),
         }
 
 
@@ -208,9 +245,10 @@ class T2CNetworkInformationSensor(
         """Return device info."""
         return {
             "identifiers": {(DOMAIN, "network")},
-            "name": "T2C - Informations réseau",
+            "name": "Informations réseau",
             "manufacturer": "T2C Clermont-Ferrand",
-            "model": "Network information",
+            "model": "Informations réseau",
+            "via_device": (DOMAIN, "hub"),
         }
 
     @property
@@ -486,7 +524,7 @@ def _alerts(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
 def _format_device_name(entry: ConfigEntry) -> str:
     """Format the Home Assistant device name."""
     return (
-        f"T2C - Ligne {entry.data[CONF_LINE_NAME]} - "
+        f"Ligne {entry.data[CONF_LINE_NAME]} - "
         f"Direction {entry.data[CONF_DIRECTION_NAME]} - "
         f"Arrêt {entry.data[CONF_STOP_NAME]}"
     )
@@ -500,3 +538,13 @@ def _format_alert_summary(alert: dict[str, Any]) -> str | None:
     if title and text:
         return f"{title} - {text}"
     return title or text
+
+
+def _hub_device_info() -> dict[str, Any]:
+    """Return the T2C hub device info."""
+    return {
+        "identifiers": {(DOMAIN, "hub")},
+        "name": "T2C - Clermont-Ferrand",
+        "manufacturer": "T2C Clermont-Ferrand",
+        "model": "T2C cloud service",
+    }

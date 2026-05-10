@@ -11,7 +11,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import T2CClient
-from .const import DOMAIN
+from .const import DOMAIN, GLOBAL_ENTRY_ID
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
@@ -53,8 +53,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
-        hass.data[DOMAIN].pop(entry.entry_id, None)
-        if not hass.data[DOMAIN]:
+        domain_data = hass.data[DOMAIN]
+
+        if domain_data.get(GLOBAL_ENTRY_ID) == entry.entry_id:
+            domain_data.pop(GLOBAL_ENTRY_ID, None)
+
+        domain_data.pop(entry.entry_id, None)
+        if not any(
+            isinstance(value, T2CRuntimeData) for value in domain_data.values()
+        ):
             hass.data.pop(DOMAIN)
 
     return unload_ok
