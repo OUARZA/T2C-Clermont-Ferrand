@@ -24,6 +24,10 @@ CONF_STOP_NAME = "stop_name"
 CONF_STOP_ID = "stop_id"
 CONF_DEPARTURE_LIMIT = "departure_limit"
 CONF_STOPS = "stops"
+CONF_MONITORING_MODE = "monitoring_mode"
+
+MODE_LINE = "line"
+MODE_STOP = "stop"
 
 DEFAULT_SCAN_INTERVAL_MINUTES = 1
 DEFAULT_DEPARTURE_LIMIT = 5

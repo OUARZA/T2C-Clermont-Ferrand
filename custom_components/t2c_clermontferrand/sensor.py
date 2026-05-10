@@ -48,10 +48,13 @@ from .const import (
     CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_NAME,
     CONF_LINE_NAME,
+    CONF_MONITORING_MODE,
     CONF_STOP_NAME,
     DEFAULT_DEPARTURE_LIMIT,
     DOMAIN,
     GLOBAL_ENTRY_ID,
+    MODE_LINE,
+    MODE_STOP,
 )
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
@@ -86,10 +89,13 @@ async def async_setup_entry(
             [
                 T2CNextPassageSensor(coordinator, stop_data, stop_runtime.key),
                 T2CUpcomingPassagesSensor(coordinator, stop_data, stop_runtime.key),
-                T2CLineAlertsSensor(coordinator, stop_data, stop_runtime.key),
                 *departure_sensors,
             ]
         )
+        if stop_data.get(CONF_MONITORING_MODE, MODE_LINE) == MODE_LINE:
+            entities.append(
+                T2CLineAlertsSensor(coordinator, stop_data, stop_runtime.key)
+            )
 
     if add_global_entities:
         entities.append(T2CNetworkInformationSensor(network_coordinator))
@@ -160,10 +166,10 @@ class T2CNextPassageSensor(T2CBaseSensor):
         first = active_data[0] if active_data else {}
 
         return {
-            ATTR_LINE: self._stop_data[CONF_LINE_NAME],
+            ATTR_LINE: first.get("route_name") or self._stop_data.get(CONF_LINE_NAME),
             ATTR_ROUTE_COLOR: first.get("route_color"),
             ATTR_ROUTE_TEXT_COLOR: first.get("route_text_color"),
-            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
+            ATTR_DIRECTION: self._stop_data.get(CONF_DIRECTION_NAME),
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_DESTINATION: first.get("destination"),
             ATTR_DUE_AT: first.get("due_at"),
@@ -202,10 +208,14 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
         """Return all upcoming departures."""
         data = _departures(self.coordinator)
         return {
-            ATTR_LINE: self._stop_data[CONF_LINE_NAME],
+            ATTR_LINE: (
+                data[0].get("route_name")
+                if data
+                else self._stop_data.get(CONF_LINE_NAME)
+            ),
             ATTR_ROUTE_COLOR: data[0].get("route_color") if data else None,
             ATTR_ROUTE_TEXT_COLOR: data[0].get("route_text_color") if data else None,
-            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
+            ATTR_DIRECTION: self._stop_data.get(CONF_DIRECTION_NAME),
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
@@ -295,8 +305,8 @@ class T2CLineAlertsSensor(T2CBaseSensor):
         first = alerts[0] if alerts else {}
 
         return {
-            ATTR_LINE: self._stop_data[CONF_LINE_NAME],
-            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
+            ATTR_LINE: self._stop_data.get(CONF_LINE_NAME),
+            ATTR_DIRECTION: self._stop_data.get(CONF_DIRECTION_NAME),
             ATTR_COUNT: len(alerts),
             ATTR_ALERTS: alerts,
             "title": first.get("title"),
@@ -354,11 +364,11 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         """Return departure details."""
         departure = self._departure or {}
         return {
-            ATTR_LINE: departure.get("route_name") or self._stop_data[CONF_LINE_NAME],
+            ATTR_LINE: departure.get("route_name") or self._stop_data.get(CONF_LINE_NAME),
             ATTR_ROUTE_ID: departure.get("route_id"),
             ATTR_ROUTE_COLOR: departure.get("route_color"),
             ATTR_ROUTE_TEXT_COLOR: departure.get("route_text_color"),
-            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
+            ATTR_DIRECTION: self._stop_data.get(CONF_DIRECTION_NAME),
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_STOP_ID: departure.get("stop_id"),
             ATTR_DESTINATION: departure.get("destination"),
@@ -478,6 +488,9 @@ def _alerts(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
 
 def _format_device_name(stop_data: dict[str, Any]) -> str:
     """Format the Home Assistant device name."""
+    if stop_data.get(CONF_MONITORING_MODE) == MODE_STOP:
+        return f"Arrêt {stop_data[CONF_STOP_NAME]}"
+
     return (
         f"Ligne {stop_data[CONF_LINE_NAME]} - "
         f"Direction {stop_data[CONF_DIRECTION_NAME]} - "
