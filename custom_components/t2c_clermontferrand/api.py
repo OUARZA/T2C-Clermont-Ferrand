@@ -247,19 +247,6 @@ class T2CClient:
         _LOGGER.debug("Loaded %s T2C routes from GTFS", len(routes))
         return routes
 
-    async def async_get_stops(self) -> list[T2CStop]:
-        """Return all available T2C stops."""
-        gtfs = await self._async_get_gtfs()
-        stops = sorted(
-            [
-                T2CStop(stop_id=stop_id, name=stop_name)
-                for stop_id, stop_name in gtfs.stops.items()
-            ],
-            key=lambda stop: _natural_key(stop.name),
-        )
-        _LOGGER.debug("Loaded %s T2C stops from GTFS", len(stops))
-        return stops
-
     async def async_get_stops_for_route(self, route_id: str) -> list[T2CStop]:
         """Return stops served by a route."""
         return await self.async_get_stops_for_direction(route_id, None)
@@ -333,20 +320,11 @@ class T2CClient:
         *,
         stop_id: str,
         limit: int,
-        route_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return next departures from the T2C timetable API."""
-        fetch_limit = max(limit * 4, limit) if route_id else limit
-        data = await self._async_get_timetable(stop_id, fetch_limit)
+        data = await self._async_get_timetable(stop_id, limit)
         gtfs = await self._async_get_gtfs()
-        departures = _parse_timetable_departures(data, gtfs, fetch_limit)
-        if route_id:
-            departures = [
-                departure
-                for departure in departures
-                if departure.route_id == route_id
-            ]
-        departures = departures[:limit]
+        departures = _parse_timetable_departures(data, gtfs, limit)
         _LOGGER.debug(
             "Parsed %s T2C timetable departures for stop=%s",
             len(departures),

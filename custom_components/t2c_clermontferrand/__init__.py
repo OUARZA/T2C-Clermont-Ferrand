@@ -12,13 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import T2CClient
-from .const import (
-    CONF_MONITORING_MODE,
-    CONF_STOPS,
-    DOMAIN,
-    GLOBAL_ENTRY_ID,
-    MODE_LINE,
-)
+from .const import CONF_STOPS, DOMAIN, GLOBAL_ENTRY_ID
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
@@ -111,17 +105,7 @@ def _configured_stops(entry: ConfigEntry) -> list[dict[str, Any]]:
 
 def _stop_key(stop_data: dict[str, Any]) -> str:
     """Return a stable identifier for a configured stop."""
-    mode = stop_data.get(CONF_MONITORING_MODE, MODE_LINE)
-    if mode == MODE_LINE:
-        return "_".join(
-            str(stop_data.get(key, ""))
-            for key in ("line_id", "direction_id", "stop_id")
-        )
-
     return "_".join(
-        str(value)
-        for value in (
-            mode,
-            stop_data.get("stop_id", ""),
-        )
+        str(stop_data.get(key, ""))
+        for key in ("line_id", "direction_id", "stop_id")
     )

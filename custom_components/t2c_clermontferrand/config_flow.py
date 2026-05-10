@@ -21,7 +21,6 @@ from .const import (
     CONF_DIRECTION_NAME,
     CONF_LINE_ID,
     CONF_LINE_NAME,
-    CONF_MONITORING_MODE,
     CONF_STOP_ID,
     CONF_STOP_NAME,
     CONF_STOPS,
@@ -29,8 +28,6 @@ from .const import (
     DOMAIN,
     MAX_DEPARTURE_LIMIT,
     MIN_DEPARTURE_LIMIT,
-    MODE_LINE,
-    MODE_STOP,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,45 +43,11 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._routes: dict[str, T2CRoute] = {}
         self._directions: dict[str, T2CDirection] = {}
         self._stops: dict[str, T2CStop] = {}
-        self._monitoring_mode: str | None = None
         self._route_id: str | None = None
         self._direction_id: str | None = None
         self._stop_id: str | None = None
 
     async def async_step_user(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Select the monitoring mode."""
-
-        if user_input is not None:
-            self._monitoring_mode = user_input[CONF_MONITORING_MODE]
-            if self._monitoring_mode == MODE_STOP:
-                return await self.async_step_stop_all()
-            return await self.async_step_line()
-
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_MONITORING_MODE): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[
-                            SelectOptionDict(
-                                value=MODE_STOP,
-                                label="Tous les passages à un arrêt",
-                            ),
-                            SelectOptionDict(
-                                value=MODE_LINE,
-                                label="Une ligne, une direction et un arrêt",
-                            ),
-                        ],
-                    )
-                )
-            }
-        )
-
-        return self.async_show_form(step_id="user", data_schema=schema)
-
-    async def async_step_line(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
@@ -116,48 +79,7 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         return self.async_show_form(
-            step_id="line",
-            data_schema=schema,
-            errors=errors,
-        )
-
-    async def async_step_stop_all(
-        self,
-        user_input: dict[str, Any] | None = None,
-    ) -> config_entries.ConfigFlowResult:
-        """Select a stop without filtering by line."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            self._stop_id = user_input[CONF_STOP_ID]
-            return await self.async_step_departures()
-
-        try:
-            stops = await self._async_get_all_stops()
-        except T2CError:
-            _LOGGER.exception("Unable to load T2C stops")
-            errors["base"] = "cannot_connect"
-            stops = []
-
-        self._stops = {stop.stop_id: stop for stop in stops}
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_STOP_ID): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[
-                            SelectOptionDict(
-                                value=stop.stop_id,
-                                label=f"{stop.name} ({stop.stop_id})",
-                            )
-                            for stop in stops
-                        ],
-                    )
-                )
-            }
-        )
-
-        return self.async_show_form(
-            step_id="stop_all",
+            step_id="user",
             data_schema=schema,
             errors=errors,
         )
@@ -170,7 +92,7 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if self._route_id is None:
-            return await self.async_step_line()
+            return await self.async_step_user()
 
         route = self._routes.get(self._route_id)
         if route is None:
@@ -224,7 +146,7 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if self._route_id is None:
-            return await self.async_step_line()
+            return await self.async_step_user()
         if self._direction_id is None:
             return await self.async_step_direction()
 
@@ -279,45 +201,31 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         user_input: dict[str, Any] | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Select how many upcoming departures should be exposed."""
-        if self._monitoring_mode == MODE_STOP:
-            if self._stop_id is None:
-                return await self.async_step_stop_all()
-        else:
-            if self._route_id is None:
-                return await self.async_step_line()
-            if self._direction_id is None:
-                return await self.async_step_direction()
-            if self._stop_id is None:
-                return await self.async_step_stop()
+        if self._route_id is None:
+            return await self.async_step_user()
+        if self._direction_id is None:
+            return await self.async_step_direction()
+        if self._stop_id is None:
+            return await self.async_step_stop()
 
-        route = self._routes.get(self._route_id or "")
-        direction = self._directions.get(self._direction_id or "")
+        route = self._routes.get(self._route_id)
+        direction = self._directions.get(self._direction_id)
         stop = self._stops.get(self._stop_id)
 
-        if self._monitoring_mode == MODE_LINE and (
-            route is None or direction is None or stop is None
-        ):
-            return self.async_abort(reason="cannot_connect")
-        if self._monitoring_mode == MODE_STOP and stop is None:
+        if route is None or direction is None or stop is None:
             return self.async_abort(reason="cannot_connect")
 
         if user_input is not None:
             departure_limit = user_input[CONF_DEPARTURE_LIMIT]
-            stop_config: dict[str, Any] = {
-                CONF_MONITORING_MODE: self._monitoring_mode or MODE_LINE,
+            stop_config = {
+                CONF_LINE_ID: route.route_id,
+                CONF_LINE_NAME: route.short_name,
+                CONF_DIRECTION_ID: direction.direction_id,
+                CONF_DIRECTION_NAME: direction.name,
                 CONF_STOP_ID: stop.stop_id,
                 CONF_STOP_NAME: stop.name,
                 CONF_DEPARTURE_LIMIT: departure_limit,
             }
-            if self._monitoring_mode == MODE_LINE:
-                stop_config.update(
-                    {
-                        CONF_LINE_ID: route.route_id,
-                        CONF_LINE_NAME: route.short_name,
-                        CONF_DIRECTION_ID: direction.direction_id,
-                        CONF_DIRECTION_NAME: direction.name,
-                    }
-                )
             stop_key = _stop_key(stop_config)
             existing_entry = self._find_existing_hub_entry()
 
@@ -365,12 +273,11 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="departures",
             data_schema=schema,
-            description_placeholders=_departure_placeholders(
-                self._monitoring_mode or MODE_LINE,
-                stop,
-                route,
-                direction,
-            ),
+            description_placeholders={
+                "direction": direction.name,
+                "line": route.label,
+                "stop": stop.name,
+            },
         )
 
     async def _async_get_routes(self) -> list[T2CRoute]:
@@ -379,11 +286,6 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         routes = await client.async_get_routes()
         self._routes = {route.route_id: route for route in routes}
         return routes
-
-    async def _async_get_all_stops(self) -> list[T2CStop]:
-        """Load all stop options."""
-        client = T2CClient(async_get_clientsession(self.hass))
-        return await client.async_get_stops()
 
     async def _async_get_directions(self, route_id: str) -> list[T2CDirection]:
         """Load direction options."""
@@ -421,44 +323,8 @@ def _configured_stops(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _stop_key(stop_data: dict[str, Any]) -> str:
-    """Return a stable key for a selected monitoring target."""
-    mode = stop_data.get(CONF_MONITORING_MODE, MODE_LINE)
-    if mode == MODE_LINE:
-        return "_".join(
-            str(stop_data.get(key, ""))
-            for key in (CONF_LINE_ID, CONF_DIRECTION_ID, CONF_STOP_ID)
-        )
-
+    """Return a stable key for a selected line, direction and stop."""
     return "_".join(
-        str(value)
-        for value in (
-            mode,
-            stop_data.get(CONF_STOP_ID, ""),
-        )
+        str(stop_data.get(key, ""))
+        for key in (CONF_LINE_ID, CONF_DIRECTION_ID, CONF_STOP_ID)
     )
-
-
-def _departure_placeholders(
-    mode: str,
-    stop: T2CStop,
-    route: T2CRoute | None,
-    direction: T2CDirection | None,
-) -> dict[str, str]:
-    """Return description placeholders for the departures step."""
-    if mode == MODE_STOP:
-        return {
-            "target": f"l'arrêt {stop.name}",
-            "direction": "toutes directions",
-            "line": "toutes lignes",
-            "stop": stop.name,
-        }
-
-    return {
-        "target": (
-            f"{stop.name}, ligne {route.label if route else ''}, "
-            f"direction {direction.name if direction else ''}"
-        ),
-        "direction": direction.name if direction else "",
-        "line": route.label if route else "",
-        "stop": stop.name,
-    }

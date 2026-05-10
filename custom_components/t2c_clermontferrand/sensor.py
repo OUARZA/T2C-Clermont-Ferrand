@@ -48,13 +48,10 @@ from .const import (
     CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_NAME,
     CONF_LINE_NAME,
-    CONF_MONITORING_MODE,
     CONF_STOP_NAME,
     DEFAULT_DEPARTURE_LIMIT,
     DOMAIN,
     GLOBAL_ENTRY_ID,
-    MODE_LINE,
-    MODE_STOP,
 )
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
@@ -89,13 +86,10 @@ async def async_setup_entry(
             [
                 T2CNextPassageSensor(coordinator, stop_data, stop_runtime.key),
                 T2CUpcomingPassagesSensor(coordinator, stop_data, stop_runtime.key),
+                T2CLineAlertsSensor(coordinator, stop_data, stop_runtime.key),
                 *departure_sensors,
             ]
         )
-        if stop_data.get(CONF_MONITORING_MODE, MODE_LINE) == MODE_LINE:
-            entities.append(
-                T2CLineAlertsSensor(coordinator, stop_data, stop_runtime.key)
-            )
 
     if add_global_entities:
         entities.append(T2CNetworkInformationSensor(network_coordinator))
@@ -488,9 +482,6 @@ def _alerts(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
 
 def _format_device_name(stop_data: dict[str, Any]) -> str:
     """Format the Home Assistant device name."""
-    if stop_data.get(CONF_MONITORING_MODE) == MODE_STOP:
-        return f"Arrêt {stop_data[CONF_STOP_NAME]}"
-
     return (
         f"Ligne {stop_data[CONF_LINE_NAME]} - "
         f"Direction {stop_data[CONF_DIRECTION_NAME]} - "

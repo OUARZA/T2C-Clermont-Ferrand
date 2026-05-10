@@ -3,13 +3,6 @@
   "config": {
     "step": {
       "user": {
-        "title": "Choisir le type de suivi",
-        "description": "Vous pouvez suivre tous les passages d'un arrêt, ou une ligne précise dans une direction précise.",
-        "data": {
-          "monitoring_mode": "Type de suivi"
-        }
-      },
-      "line": {
         "title": "Choisir une ligne T2C",
         "description": "Les lignes sont chargées depuis le GTFS officiel T2C.",
         "data": {
@@ -30,16 +23,9 @@
           "stop_id": "Arrêt"
         }
       },
-      "stop_all": {
-        "title": "Choisir un arrêt",
-        "description": "Sélectionnez l'arrêt à surveiller, toutes lignes confondues.",
-        "data": {
-          "stop_id": "Arrêt"
-        }
-      },
       "departures": {
         "title": "Choisir le nombre de passages",
-        "description": "Sélectionnez le nombre de prochains passages à afficher pour {target}.",
+        "description": "Sélectionnez le nombre de prochains passages à afficher pour {stop}, ligne {line}, direction {direction}.",
         "data": {
           "departure_limit": "Nombre de prochains passages"
         }
