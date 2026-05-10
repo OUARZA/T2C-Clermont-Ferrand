@@ -236,11 +236,11 @@ class T2CNetworkInformationSensor(
 
     @property
     def native_value(self) -> str | None:
-        """Return the first network message title."""
+        """Return the first network message."""
         messages = _network_messages(self.coordinator)
         if not messages:
             return None
-        return messages[0].get("title")
+        return _format_alert_summary(messages[0])
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -534,4 +534,3 @@ def _format_alert_summary(alert: dict[str, Any]) -> str | None:
     if title and text:
         return f"{title} - {text}"
     return title or text
-

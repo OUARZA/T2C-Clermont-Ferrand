@@ -31,7 +31,7 @@ GTFS_CACHE_SECONDS = 12 * 60 * 60
 HTTP_TIMEOUT = 20
 MAX_STOP_OPTIONS = 500
 T2C_TIME_ZONE = ZoneInfo("Europe/Paris")
-NETWORK_MESSAGES_API_URL = "https://api.t2c.fr/siv/alerts"
+NETWORK_MESSAGES_API_URL = "https://api.t2c.fr/siv/alerts/banners"
 
 
 class T2CError(Exception):
