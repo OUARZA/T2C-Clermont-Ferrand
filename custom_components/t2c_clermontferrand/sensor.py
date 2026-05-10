@@ -57,7 +57,6 @@ async def async_setup_entry(
 ) -> None:
     """Set up T2C sensors."""
     runtime_data = hass.data[DOMAIN][entry.entry_id]
-    coordinator = runtime_data.coordinator
     network_coordinator = runtime_data.network_coordinator
     domain_data = hass.data[DOMAIN]
     add_global_entities = GLOBAL_ENTRY_ID not in domain_data
@@ -65,54 +64,36 @@ async def async_setup_entry(
     if add_global_entities:
         domain_data[GLOBAL_ENTRY_ID] = entry.entry_id
 
-    departure_limit = entry.data.get(CONF_DEPARTURE_LIMIT, DEFAULT_DEPARTURE_LIMIT)
-    departure_sensors = [
-        T2CDepartureTimeSensor(coordinator, entry, index)
-        for index in range(departure_limit)
-    ]
-    departure_info_sensors = [
-        T2CDepartureInfoSensor(coordinator, entry, index)
-        for index in range(departure_limit)
-    ]
-    entities: list[SensorEntity] = [
-        T2CNextPassageSensor(coordinator, entry),
-        T2CUpcomingPassagesSensor(coordinator, entry),
-        T2CLineAlertsSensor(coordinator, entry),
-        *departure_sensors,
-        *departure_info_sensors,
-    ]
-
-    if add_global_entities:
+    entities: list[SensorEntity] = []
+    for stop_runtime in runtime_data.stops:
+        stop_data = stop_runtime.data
+        coordinator = stop_runtime.coordinator
+        departure_limit = stop_data.get(
+            CONF_DEPARTURE_LIMIT,
+            DEFAULT_DEPARTURE_LIMIT,
+        )
+        departure_sensors = [
+            T2CDepartureTimeSensor(coordinator, stop_data, stop_runtime.key, index)
+            for index in range(departure_limit)
+        ]
+        departure_info_sensors = [
+            T2CDepartureInfoSensor(coordinator, stop_data, stop_runtime.key, index)
+            for index in range(departure_limit)
+        ]
         entities.extend(
             [
-                T2CHubSensor(network_coordinator),
-                T2CNetworkInformationSensor(network_coordinator),
+                T2CNextPassageSensor(coordinator, stop_data, stop_runtime.key),
+                T2CUpcomingPassagesSensor(coordinator, stop_data, stop_runtime.key),
+                T2CLineAlertsSensor(coordinator, stop_data, stop_runtime.key),
+                *departure_sensors,
+                *departure_info_sensors,
             ]
         )
 
+    if add_global_entities:
+        entities.append(T2CNetworkInformationSensor(network_coordinator))
+
     async_add_entities(entities)
-
-
-class T2CHubSensor(CoordinatorEntity[T2CNetworkCoordinator], SensorEntity):
-    """Sensor creating the T2C hub device."""
-
-    _attr_has_entity_name = True
-    _attr_name = "État"
-    _attr_unique_id = f"{DOMAIN}_hub_status"
-
-    def __init__(self, coordinator: T2CNetworkCoordinator) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-
-    @property
-    def device_info(self):
-        """Return hub device info."""
-        return _hub_device_info()
-
-    @property
-    def native_value(self) -> str:
-        """Return hub status."""
-        return "OK"
 
 
 class T2CBaseSensor(CoordinatorEntity[T2CDataUpdateCoordinator], SensorEntity):
@@ -123,23 +104,24 @@ class T2CBaseSensor(CoordinatorEntity[T2CDataUpdateCoordinator], SensorEntity):
     def __init__(
         self,
         coordinator: T2CDataUpdateCoordinator,
-        entry: ConfigEntry,
+        stop_data: dict[str, Any],
+        device_key: str,
         key: str,
     ) -> None:
         """Initialize the base sensor."""
         super().__init__(coordinator)
-        self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._stop_data = stop_data
+        self._device_key = device_key
+        self._attr_unique_id = f"{DOMAIN}_{device_key}_{key}"
 
     @property
     def device_info(self):
         """Return device info."""
         return {
-            "identifiers": {(DOMAIN, self._entry.entry_id)},
-            "name": _format_device_name(self._entry),
+            "identifiers": {(DOMAIN, self._device_key)},
+            "name": _format_device_name(self._stop_data),
             "manufacturer": "T2C Clermont-Ferrand",
             "model": "GTFS-Realtime Trip Updates",
-            "via_device": (DOMAIN, "hub"),
         }
 
 
@@ -153,10 +135,11 @@ class T2CNextPassageSensor(T2CBaseSensor):
     def __init__(
         self,
         coordinator: T2CDataUpdateCoordinator,
-        entry: ConfigEntry,
+        stop_data: dict[str, Any],
+        device_key: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, "next_passage")
+        super().__init__(coordinator, stop_data, device_key, "next_passage")
 
     @property
     def native_value(self):
@@ -176,9 +159,9 @@ class T2CNextPassageSensor(T2CBaseSensor):
         first = active_data[0] if active_data else {}
 
         return {
-            ATTR_LINE: self._entry.data[CONF_LINE_NAME],
-            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
-            ATTR_STOP: self._entry.data[CONF_STOP_NAME],
+            ATTR_LINE: self._stop_data[CONF_LINE_NAME],
+            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
+            ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_DESTINATION: first.get("destination"),
             ATTR_DUE_AT: first.get("due_at"),
             ATTR_STATUS: first.get("status"),
@@ -200,10 +183,11 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
     def __init__(
         self,
         coordinator: T2CDataUpdateCoordinator,
-        entry: ConfigEntry,
+        stop_data: dict[str, Any],
+        device_key: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, "upcoming_passages")
+        super().__init__(coordinator, stop_data, device_key, "upcoming_passages")
 
     @property
     def native_value(self) -> int:
@@ -215,9 +199,9 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
         """Return all upcoming departures."""
         data = _departures(self.coordinator)
         return {
-            ATTR_LINE: self._entry.data[CONF_LINE_NAME],
-            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
-            ATTR_STOP: self._entry.data[CONF_STOP_NAME],
+            ATTR_LINE: self._stop_data[CONF_LINE_NAME],
+            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
+            ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
             ATTR_MESSAGES: _messages(self.coordinator),
@@ -248,7 +232,6 @@ class T2CNetworkInformationSensor(
             "name": "Informations réseau",
             "manufacturer": "T2C Clermont-Ferrand",
             "model": "Informations réseau",
-            "via_device": (DOMAIN, "hub"),
         }
 
     @property
@@ -286,10 +269,11 @@ class T2CLineAlertsSensor(T2CBaseSensor):
     def __init__(
         self,
         coordinator: T2CDataUpdateCoordinator,
-        entry: ConfigEntry,
+        stop_data: dict[str, Any],
+        device_key: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, "line_alerts")
+        super().__init__(coordinator, stop_data, device_key, "line_alerts")
 
     @property
     def native_value(self) -> str | None:
@@ -306,8 +290,8 @@ class T2CLineAlertsSensor(T2CBaseSensor):
         first = alerts[0] if alerts else {}
 
         return {
-            ATTR_LINE: self._entry.data[CONF_LINE_NAME],
-            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
+            ATTR_LINE: self._stop_data[CONF_LINE_NAME],
+            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
             ATTR_COUNT: len(alerts),
             ATTR_ALERTS: alerts,
             "title": first.get("title"),
@@ -326,11 +310,17 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
     def __init__(
         self,
         coordinator: T2CDataUpdateCoordinator,
-        entry: ConfigEntry,
+        stop_data: dict[str, Any],
+        device_key: str,
         index: int,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, f"departure_{index + 1}")
+        super().__init__(
+            coordinator,
+            stop_data,
+            device_key,
+            f"departure_{index + 1}",
+        )
         self._index = index
         self._attr_name = f"Passage {index + 1}"
 
@@ -359,9 +349,9 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         """Return departure details."""
         departure = self._departure or {}
         return {
-            ATTR_LINE: departure.get("route_name") or self._entry.data[CONF_LINE_NAME],
-            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
-            ATTR_STOP: self._entry.data[CONF_STOP_NAME],
+            ATTR_LINE: departure.get("route_name") or self._stop_data[CONF_LINE_NAME],
+            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
+            ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_DESTINATION: departure.get("destination"),
             ATTR_DUE_AT: departure.get("due_at"),
             ATTR_SCHEDULED_AT: departure.get("scheduled_at"),
@@ -389,11 +379,17 @@ class T2CDepartureInfoSensor(T2CBaseSensor):
     def __init__(
         self,
         coordinator: T2CDataUpdateCoordinator,
-        entry: ConfigEntry,
+        stop_data: dict[str, Any],
+        device_key: str,
         index: int,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, f"departure_{index + 1}_info")
+        super().__init__(
+            coordinator,
+            stop_data,
+            device_key,
+            f"departure_{index + 1}_info",
+        )
         self._index = index
         self._attr_name = f"Info passage {index + 1}"
 
@@ -410,9 +406,9 @@ class T2CDepartureInfoSensor(T2CBaseSensor):
         """Return departure details."""
         departure = self._departure or {}
         return {
-            ATTR_LINE: departure.get("route_name") or self._entry.data[CONF_LINE_NAME],
-            ATTR_DIRECTION: self._entry.data[CONF_DIRECTION_NAME],
-            ATTR_STOP: self._entry.data[CONF_STOP_NAME],
+            ATTR_LINE: departure.get("route_name") or self._stop_data[CONF_LINE_NAME],
+            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
+            ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_DESTINATION: departure.get("destination"),
             ATTR_DUE_AT: departure.get("due_at"),
             ATTR_MINUTES: departure.get("minutes"),
@@ -521,12 +517,12 @@ def _alerts(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
     return data.get("alerts", [])
 
 
-def _format_device_name(entry: ConfigEntry) -> str:
+def _format_device_name(stop_data: dict[str, Any]) -> str:
     """Format the Home Assistant device name."""
     return (
-        f"Ligne {entry.data[CONF_LINE_NAME]} - "
-        f"Direction {entry.data[CONF_DIRECTION_NAME]} - "
-        f"Arrêt {entry.data[CONF_STOP_NAME]}"
+        f"Ligne {stop_data[CONF_LINE_NAME]} - "
+        f"Direction {stop_data[CONF_DIRECTION_NAME]} - "
+        f"Arrêt {stop_data[CONF_STOP_NAME]}"
     )
 
 
@@ -539,12 +535,3 @@ def _format_alert_summary(alert: dict[str, Any]) -> str | None:
         return f"{title} - {text}"
     return title or text
 
-
-def _hub_device_info() -> dict[str, Any]:
-    """Return the T2C hub device info."""
-    return {
-        "identifiers": {(DOMAIN, "hub")},
-        "name": "T2C - Clermont-Ferrand",
-        "manufacturer": "T2C Clermont-Ferrand",
-        "model": "T2C cloud service",
-    }

@@ -31,16 +31,19 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
         hass: HomeAssistant,
         entry: ConfigEntry,
         client: T2CClient,
+        stop_data: dict[str, Any] | None = None,
+        name_suffix: str | None = None,
     ) -> None:
         """Initialize the coordinator."""
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_{entry.entry_id}",
+            name=f"{DOMAIN}_{name_suffix or entry.entry_id}",
             update_interval=timedelta(minutes=DEFAULT_SCAN_INTERVAL_MINUTES),
         )
         self.entry = entry
         self.client = client
+        self.stop_data = stop_data or dict(entry.data)
 
     async def _async_update_data(self) -> dict[str, list[dict[str, Any]]]:
         """Fetch latest departure data."""
@@ -48,9 +51,10 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
             CONF_DEPARTURE_LIMIT,
             DEFAULT_DEPARTURE_LIMIT,
         )
+        departure_limit = self.stop_data.get(CONF_DEPARTURE_LIMIT, departure_limit)
         try:
             departures = await self.client.async_get_timetable_departures(
-                stop_id=self.entry.data[CONF_STOP_ID],
+                stop_id=self.stop_data[CONF_STOP_ID],
                 limit=departure_limit,
             )
         except T2CError as err:
@@ -59,7 +63,7 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
 
         try:
             messages = await self.client.async_get_stop_messages(
-                stop_id=self.entry.data[CONF_STOP_ID],
+                stop_id=self.stop_data[CONF_STOP_ID],
                 limit=departure_limit,
             )
         except T2CError:
@@ -68,7 +72,7 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
 
         try:
             alerts = await self.client.async_get_line_alerts(
-                self.entry.data[CONF_LINE_ID],
+                self.stop_data[CONF_LINE_ID],
             )
         except T2CError:
             _LOGGER.debug("T2C line alerts update failed", exc_info=True)
@@ -79,7 +83,7 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
             len(departures),
             len(messages),
             len(alerts),
-            self.entry.data[CONF_STOP_ID],
+            self.stop_data[CONF_STOP_ID],
         )
         return {
             "departures": departures,

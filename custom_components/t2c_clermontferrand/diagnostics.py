@@ -16,7 +16,7 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     domain_data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-    coordinator = getattr(domain_data, "coordinator", None)
+    stop_runtimes = getattr(domain_data, "stops", [])
     network_coordinator = getattr(domain_data, "network_coordinator", None)
     client = getattr(domain_data, "client", None)
     gtfs = getattr(client, "_gtfs", None)
@@ -27,11 +27,32 @@ async def async_get_config_entry_diagnostics(
             "title": entry.title,
             "data": dict(entry.data),
         },
-        "coordinator": {
-            "last_update_success": getattr(coordinator, "last_update_success", None),
-            "last_exception": repr(getattr(coordinator, "last_exception", None)),
-            "data": getattr(coordinator, "data", None),
-        },
+        "stops": [
+            {
+                "key": getattr(stop_runtime, "key", None),
+                "data": getattr(stop_runtime, "data", None),
+                "coordinator": {
+                    "last_update_success": getattr(
+                        getattr(stop_runtime, "coordinator", None),
+                        "last_update_success",
+                        None,
+                    ),
+                    "last_exception": repr(
+                        getattr(
+                            getattr(stop_runtime, "coordinator", None),
+                            "last_exception",
+                            None,
+                        )
+                    ),
+                    "data": getattr(
+                        getattr(stop_runtime, "coordinator", None),
+                        "data",
+                        None,
+                    ),
+                },
+            }
+            for stop_runtime in stop_runtimes
+        ],
         "network_coordinator": {
             "last_update_success": getattr(
                 network_coordinator,

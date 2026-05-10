@@ -23,6 +23,7 @@ from .const import (
     CONF_LINE_NAME,
     CONF_STOP_ID,
     CONF_STOP_NAME,
+    CONF_STOPS,
     DEFAULT_DEPARTURE_LIMIT,
     DOMAIN,
     MAX_DEPARTURE_LIMIT,
@@ -216,21 +217,45 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             departure_limit = user_input[CONF_DEPARTURE_LIMIT]
-            unique_id = f"{self._route_id}_{self._direction_id}_{stop.stop_id}"
-            await self.async_set_unique_id(unique_id)
+            stop_config = {
+                CONF_LINE_ID: route.route_id,
+                CONF_LINE_NAME: route.short_name,
+                CONF_DIRECTION_ID: direction.direction_id,
+                CONF_DIRECTION_NAME: direction.name,
+                CONF_STOP_ID: stop.stop_id,
+                CONF_STOP_NAME: stop.name,
+                CONF_DEPARTURE_LIMIT: departure_limit,
+            }
+            stop_key = _stop_key(stop_config)
+            existing_entry = self._find_existing_hub_entry()
+
+            if existing_entry is not None:
+                configured_stops = _configured_stops(existing_entry.data)
+                already_configured = any(
+                    _stop_key(configured) == stop_key
+                    for configured in configured_stops
+                )
+                if already_configured:
+                    return self.async_abort(reason="already_configured")
+
+                self.hass.config_entries.async_update_entry(
+                    existing_entry,
+                    data={
+                        **existing_entry.data,
+                        CONF_STOPS: [*configured_stops, stop_config],
+                    },
+                )
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(existing_entry.entry_id)
+                )
+                return self.async_abort(reason="stop_added")
+
+            await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
 
             return self.async_create_entry(
-                title=_format_entry_title(route.short_name, direction.name, stop.name),
-                data={
-                    CONF_LINE_ID: route.route_id,
-                    CONF_LINE_NAME: route.short_name,
-                    CONF_DIRECTION_ID: direction.direction_id,
-                    CONF_DIRECTION_NAME: direction.name,
-                    CONF_STOP_ID: stop.stop_id,
-                    CONF_STOP_NAME: stop.name,
-                    CONF_DEPARTURE_LIMIT: departure_limit,
-                },
+                title=_format_entry_title(),
+                data={CONF_STOPS: [stop_config]},
             )
 
         schema = vol.Schema(
@@ -276,7 +301,30 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         client = T2CClient(async_get_clientsession(self.hass))
         return await client.async_get_stops_for_direction(route_id, direction_id)
 
+    def _find_existing_hub_entry(self) -> config_entries.ConfigEntry | None:
+        """Return the existing hub config entry if it exists."""
+        for entry in self._async_current_entries():
+            if entry.unique_id == DOMAIN or CONF_STOPS in entry.data:
+                return entry
+        return None
 
-def _format_entry_title(line: str, direction: str, stop: str) -> str:
+
+def _format_entry_title() -> str:
     """Format the Home Assistant config entry title."""
-    return f"T2C - Ligne {line} - Direction {direction} - Arrêt {stop}"
+    return "T2C - Clermont-Ferrand"
+
+
+def _configured_stops(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return configured stops from a config entry data dict."""
+    stops = data.get(CONF_STOPS)
+    if isinstance(stops, list):
+        return [dict(stop) for stop in stops if isinstance(stop, dict)]
+    return [dict(data)]
+
+
+def _stop_key(stop_data: dict[str, Any]) -> str:
+    """Return a stable key for a selected line, direction and stop."""
+    return "_".join(
+        str(stop_data.get(key, ""))
+        for key in (CONF_LINE_ID, CONF_DIRECTION_ID, CONF_STOP_ID)
+    )

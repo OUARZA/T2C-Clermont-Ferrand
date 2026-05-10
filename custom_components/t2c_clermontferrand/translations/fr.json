@@ -36,7 +36,8 @@
     },
     "abort": {
       "already_configured": "Cet arrêt est déjà configuré.",
-      "cannot_connect": "Impossible de charger les données officielles T2C."
+      "cannot_connect": "Impossible de charger les données officielles T2C.",
+      "stop_added": "L'arrêt a été ajouté au service T2C Clermont-Ferrand."
     }
   }
 }
