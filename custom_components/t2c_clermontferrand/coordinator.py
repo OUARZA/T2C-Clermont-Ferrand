@@ -70,13 +70,34 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
             _LOGGER.debug("T2C information messages update failed", exc_info=True)
             messages = []
 
+        line_alerts_by_route: dict[str, list[dict[str, Any]]] = {}
+        configured_line_id = self.stop_data[CONF_LINE_ID]
         try:
-            alerts = await self.client.async_get_line_alerts(
-                self.stop_data[CONF_LINE_ID],
-            )
+            alerts = await self.client.async_get_line_alerts(configured_line_id)
+            line_alerts_by_route[configured_line_id] = alerts
         except T2CError:
             _LOGGER.debug("T2C line alerts update failed", exc_info=True)
             alerts = []
+
+        for route_id in _departure_route_ids(departures):
+            if route_id in line_alerts_by_route:
+                continue
+            try:
+                line_alerts_by_route[route_id] = await self.client.async_get_line_alerts(
+                    route_id,
+                )
+            except T2CError:
+                _LOGGER.debug(
+                    "T2C line alerts update failed for route %s",
+                    route_id,
+                    exc_info=True,
+                )
+                line_alerts_by_route[route_id] = []
+
+        departures = _attach_line_alerts_to_departures(
+            departures,
+            line_alerts_by_route,
+        )
 
         _LOGGER.debug(
             "Coordinator fetched %s departures, %s messages and %s alerts for stop %s",
@@ -119,3 +140,39 @@ class T2CNetworkCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, Any]]
 
         _LOGGER.debug("Network coordinator fetched %s messages", len(messages))
         return {"messages": messages}
+
+
+def _departure_route_ids(departures: list[dict[str, Any]]) -> set[str]:
+    """Return route IDs found in departures."""
+    return {
+        str(route_id)
+        for departure in departures
+        if (route_id := departure.get("route_id"))
+    }
+
+
+def _attach_line_alerts_to_departures(
+    departures: list[dict[str, Any]],
+    line_alerts_by_route: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Attach line alerts to each departure using the departure route."""
+    enriched: list[dict[str, Any]] = []
+
+    for departure in departures:
+        item = dict(departure)
+        route_id = str(item.get("route_id") or "")
+        line_alerts = line_alerts_by_route.get(route_id, [])
+        first_alert = line_alerts[0] if line_alerts else {}
+
+        item["line_alerts"] = line_alerts
+        item["has_alert"] = bool(line_alerts)
+        item["alert_icon"] = "mdi:alert-circle" if line_alerts else None
+        item["alert_title"] = first_alert.get("title")
+        item["alert_text"] = first_alert.get("text")
+        item["alert_updated_at"] = first_alert.get("updated_at")
+        if not item.get("info") and first_alert.get("title"):
+            item["info"] = first_alert["title"]
+
+        enriched.append(item)
+
+    return enriched
