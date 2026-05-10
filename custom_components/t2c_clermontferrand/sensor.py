@@ -80,17 +80,12 @@ async def async_setup_entry(
             T2CDepartureTimeSensor(coordinator, stop_data, stop_runtime.key, index)
             for index in range(departure_limit)
         ]
-        departure_info_sensors = [
-            T2CDepartureInfoSensor(coordinator, stop_data, stop_runtime.key, index)
-            for index in range(departure_limit)
-        ]
         entities.extend(
             [
                 T2CNextPassageSensor(coordinator, stop_data, stop_runtime.key),
                 T2CUpcomingPassagesSensor(coordinator, stop_data, stop_runtime.key),
                 T2CLineAlertsSensor(coordinator, stop_data, stop_runtime.key),
                 *departure_sensors,
-                *departure_info_sensors,
             ]
         )
 
@@ -344,9 +339,9 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
 
         due_at = _parse_datetime(departure.get("due_at"))
         if self._index == 0:
-            return _format_minutes(departure.get("minutes"))
+            return _format_minutes(departure.get("minutes")) or "Aucune info"
 
-        return _format_departure_time(departure, due_at)
+        return _format_departure_time(departure, due_at) or "Aucune info"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -364,7 +359,7 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
             ATTR_SCHEDULED_AT: departure.get("scheduled_at"),
             ATTR_ESTIMATED_AT: departure.get("estimated_at"),
             ATTR_MINUTES: departure.get("minutes"),
-            ATTR_INFO: _format_departure_info(departure),
+            ATTR_INFO: _format_departure_info(departure) or "Aucune info",
             ATTR_STATUS: departure.get("status"),
             ATTR_THEORETICAL: departure.get("theoretical"),
             ATTR_REALTIME: departure.get("realtime"),
@@ -380,60 +375,6 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
             return None
         return data[self._index]
 
-
-class T2CDepartureInfoSensor(T2CBaseSensor):
-    """Sensor exposing the information column for one departure."""
-
-    def __init__(
-        self,
-        coordinator: T2CDataUpdateCoordinator,
-        stop_data: dict[str, Any],
-        device_key: str,
-        index: int,
-    ) -> None:
-        """Initialize the sensor."""
-        super().__init__(
-            coordinator,
-            stop_data,
-            device_key,
-            f"departure_{index + 1}_info",
-        )
-        self._index = index
-        self._attr_name = f"Info passage {index + 1}"
-
-    @property
-    def native_value(self) -> str | None:
-        """Return the departure information."""
-        departure = self._departure
-        if departure is None:
-            return "Aucune info"
-        return _format_departure_info(departure) or "Aucune info"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return departure details."""
-        departure = self._departure or {}
-        return {
-            ATTR_LINE: departure.get("route_name") or self._stop_data[CONF_LINE_NAME],
-            ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
-            ATTR_STOP: self._stop_data[CONF_STOP_NAME],
-            ATTR_DESTINATION: departure.get("destination"),
-            ATTR_DUE_AT: departure.get("due_at"),
-            ATTR_MINUTES: departure.get("minutes"),
-            ATTR_STATUS: departure.get("status"),
-            ATTR_THEORETICAL: departure.get("theoretical"),
-            ATTR_REALTIME: departure.get("realtime"),
-        }
-
-    @property
-    def _departure(self) -> dict[str, Any] | None:
-        """Return the departure represented by this sensor."""
-        data = _departures(self.coordinator)
-        if self._index >= len(data):
-            return None
-        return data[self._index]
-
-
 def _format_departure_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return table-friendly departure attributes."""
     departures: list[dict[str, Any]] = []
@@ -445,7 +386,7 @@ def _format_departure_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "ligne": item.get("route_name"),
                 "destination": item.get("destination"),
                 "depart": _format_departure_time(item, due_at),
-                "info": _format_departure_info(item),
+                "info": _format_departure_info(item) or "Aucune info",
                 "etat": item.get("status"),
                 "theorique": item.get("theoretical"),
                 "temps_reel": item.get("realtime"),
