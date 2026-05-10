@@ -280,8 +280,8 @@ class T2CLineAlertsSensor(T2CBaseSensor):
         """Return the first line alert title."""
         alerts = _alerts(self.coordinator)
         if not alerts:
-            return None
-        return _format_alert_summary(alerts[0], include_updated_at=True)
+            return "Aucune perturbation"
+        return alerts[0].get("title") or "Perturbation"
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -552,3 +552,4 @@ def _format_updated_at(alert: dict[str, Any]) -> str | None:
     if updated_at is None:
         return None
     return dt_util.as_local(updated_at).strftime("%d/%m/%Y %H:%M")
+
