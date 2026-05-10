@@ -23,15 +23,18 @@ from .const import (
     ATTR_DESTINATION,
     ATTR_ESTIMATED_AT,
     ATTR_LINE,
+    ATTR_LABEL,
     ATTR_MESSAGES,
     ATTR_MINUTES,
     ATTR_INFO,
     ATTR_NEXT_PASSAGES,
     ATTR_RAW_PASSAGES,
     ATTR_REALTIME,
+    ATTR_ROUTE_ID,
     ATTR_SCHEDULED_AT,
     ATTR_STATUS,
     ATTR_STOP,
+    ATTR_STOP_ID,
     ATTR_LEVEL,
     ATTR_PRIORITY,
     ATTR_TRIP_ID,
@@ -39,6 +42,7 @@ from .const import (
     ATTR_UPDATED_AT,
     ATTR_VALID_FROM,
     ATTR_VALID_UNTIL,
+    ATTR_VEHICLE_ID,
     CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_NAME,
     CONF_LINE_NAME,
@@ -350,9 +354,12 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         departure = self._departure or {}
         return {
             ATTR_LINE: departure.get("route_name") or self._stop_data[CONF_LINE_NAME],
+            ATTR_ROUTE_ID: departure.get("route_id"),
             ATTR_DIRECTION: self._stop_data[CONF_DIRECTION_NAME],
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
+            ATTR_STOP_ID: departure.get("stop_id"),
             ATTR_DESTINATION: departure.get("destination"),
+            ATTR_LABEL: departure.get("label"),
             ATTR_DUE_AT: departure.get("due_at"),
             ATTR_SCHEDULED_AT: departure.get("scheduled_at"),
             ATTR_ESTIMATED_AT: departure.get("estimated_at"),
@@ -362,6 +369,7 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
             ATTR_THEORETICAL: departure.get("theoretical"),
             ATTR_REALTIME: departure.get("realtime"),
             ATTR_TRIP_ID: departure.get("trip_id"),
+            ATTR_VEHICLE_ID: departure.get("vehicle_id"),
         }
 
     @property
@@ -552,4 +560,3 @@ def _format_updated_at(alert: dict[str, Any]) -> str | None:
     if updated_at is None:
         return None
     return dt_util.as_local(updated_at).strftime("%d/%m/%Y %H:%M")
-
