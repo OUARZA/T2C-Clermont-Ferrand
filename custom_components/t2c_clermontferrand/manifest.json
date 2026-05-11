@@ -2,17 +2,15 @@
   "domain": "t2c_clermontferrand",
   "name": "T2C Clermont-Ferrand",
   "codeowners": [
-		"@ouarza"
-	],
+    "@ouarza"
+  ],
   "config_flow": true,
-  "dependencies": [],
-  "documentation": "https://github.com/ouarza/t2c_clermontferrand",
+  "documentation": "https://github.com/OUARZA/T2C-Clermont-Ferrand",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/ouarza/t2c_clermontferrand/issues",
+  "issue_tracker": "https://github.com/OUARZA/T2C-Clermont-Ferrand/issues",
   "requirements": [
     "gtfs-realtime-bindings==1.0.0"
   ],
-  "quality_scale": "silver",
   "version": "0.1.1"
 }
