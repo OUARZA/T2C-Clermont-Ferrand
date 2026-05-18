@@ -59,6 +59,8 @@ from .const import (
 )
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
+NO_NETWORK_INFORMATION = "Pas d'information du réseau T2C"
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -252,7 +254,7 @@ class T2CNetworkInformationSensor(
         """Return the first network message."""
         messages = _network_messages(self.coordinator)
         if not messages:
-            return None
+            return NO_NETWORK_INFORMATION
         return _format_alert_summary(messages[0])
 
     @property

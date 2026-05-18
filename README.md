@@ -110,7 +110,7 @@ sont maintenant directement disponibles dans les attributs de chaque `Passage X`
 
 | Entité | Etat | Description |
 | --- | --- | --- |
-| `Informations réseau` | Message réseau ou aucun état | Messages globaux du réseau T2C. |
+| `Informations réseau` | Message réseau ou `Pas d'information du réseau T2C` | Messages globaux du réseau T2C. |
 
 ## Attributs des passages
 
@@ -244,7 +244,7 @@ contiennent notamment :
 ## Notes techniques
 
 - Domaine Home Assistant : `t2c_clermontferrand`.
-- Version actuelle : `0.1.1`.
+- Version actuelle : `0.2.0`.
 - Rafraîchissement par défaut : toutes les minutes.
 - Type d'intégration : `service`.
 - Classe IoT : `cloud_polling`.
