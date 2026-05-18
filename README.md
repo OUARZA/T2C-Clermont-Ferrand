@@ -1,5 +1,7 @@
 # T2C Clermont-Ferrand
 
+<img src="logo.png" alt="Logo T2C Clermont-Ferrand" width="100">
+
 Intégration Home Assistant personnalisée pour suivre les prochains passages du
 réseau T2C de Clermont-Ferrand.
 
