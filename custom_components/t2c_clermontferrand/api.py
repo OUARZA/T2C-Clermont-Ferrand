@@ -494,8 +494,15 @@ def _parse_gtfs_rt_trip_updates(
 def _parse_timetable_messages(data: dict[str, Any]) -> list[T2CMessage]:
     """Parse information messages from the T2C timetable JSON API."""
     messages: list[T2CMessage] = []
+    raw_messages = data.get("message") or []
 
-    for item in data.get("message", []):
+    if not isinstance(raw_messages, list):
+        return messages
+
+    for item in raw_messages:
+        if not isinstance(item, dict):
+            continue
+
         title = item.get("title")
         content = item.get("content")
 
@@ -525,8 +532,20 @@ def _parse_timetable_departures(
     """Parse departures from the T2C timetable JSON API."""
     departures: list[T2CDeparture] = []
     now_ts = int(time.time())
+    timetable = data.get("timetable")
 
-    for item in data.get("timetable", {}).get("timetable", []):
+    if not isinstance(timetable, dict):
+        raise T2CDataError("Unexpected T2C timetable API payload")
+
+    raw_departures = timetable.get("timetable") or []
+
+    if not isinstance(raw_departures, list):
+        raise T2CDataError("Unexpected T2C timetable API payload")
+
+    for item in raw_departures:
+        if not isinstance(item, dict):
+            continue
+
         due_at = _parse_t2c_datetime(
             item.get("datetime_estimated") or item.get("datetime")
         )
