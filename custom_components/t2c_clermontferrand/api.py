@@ -11,6 +11,7 @@ from io import BytesIO, TextIOWrapper
 import logging
 import re
 import time
+import unicodedata
 from typing import Any
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -320,11 +321,20 @@ class T2CClient:
         *,
         stop_id: str,
         limit: int,
+        route_id: str | None = None,
+        direction_name: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return next departures from the T2C timetable API."""
-        data = await self._async_get_timetable(stop_id, limit)
+        fetch_limit = _timetable_fetch_limit(limit, route_id, direction_name)
+        data = await self._async_get_timetable(stop_id, fetch_limit)
         gtfs = await self._async_get_gtfs()
-        departures = _parse_timetable_departures(data, gtfs, limit)
+        departures = _parse_timetable_departures(
+            data,
+            gtfs,
+            limit,
+            route_id=route_id,
+            direction_name=direction_name,
+        )
         _LOGGER.debug(
             "Parsed %s T2C timetable departures for stop=%s",
             len(departures),
@@ -528,6 +538,9 @@ def _parse_timetable_departures(
     data: dict[str, Any],
     gtfs: _GtfsIndex,
     limit: int,
+    *,
+    route_id: str | None = None,
+    direction_name: str | None = None,
 ) -> list[T2CDeparture]:
     """Parse departures from the T2C timetable JSON API."""
     departures: list[T2CDeparture] = []
@@ -560,15 +573,22 @@ def _parse_timetable_departures(
         info = item.get("info")
         line_ref = item.get("line_id")
         route = _find_route(gtfs, line_ref)
+        resolved_route_id = route.route_id if route else line_ref
+        destination = item.get("destination")
+
+        if route_id and resolved_route_id != route_id:
+            continue
+        if direction_name and not _same_direction(destination, direction_name):
+            continue
 
         departures.append(
             T2CDeparture(
-                route_id=route.route_id if route else line_ref,
+                route_id=resolved_route_id,
                 route_name=route.short_name if route else line_ref,
                 route_color=route.color if route else None,
                 route_text_color=route.text_color if route else None,
                 stop_id=data.get("referential_parameter", {}).get("stop_id", ""),
-                destination=item.get("destination"),
+                destination=destination,
                 due_at=due_at,
                 minutes=minutes,
                 realtime=estimated_at is not None and theoretical is False,
@@ -581,6 +601,32 @@ def _parse_timetable_departures(
         )
 
     return departures[:limit]
+
+
+def _timetable_fetch_limit(
+    limit: int,
+    route_id: str | None,
+    direction_name: str | None,
+) -> int:
+    """Return a larger API limit when local filtering is needed."""
+    if not route_id and not direction_name:
+        return limit
+    return max(limit, min(limit * 5, 50))
+
+
+def _same_direction(value: Any, expected: str) -> bool:
+    """Return whether a timetable destination matches the configured direction."""
+    if not isinstance(value, str):
+        return False
+    return _normalize_text(value) == _normalize_text(expected)
+
+
+def _normalize_text(value: str) -> str:
+    """Return text normalized for matching public T2C labels."""
+    normalized = unicodedata.normalize("NFKD", value)
+    return "".join(
+        char for char in normalized.casefold() if not unicodedata.combining(char)
+    ).strip()
 
 
 def _find_route(gtfs: _GtfsIndex, line_ref: str | None) -> T2CRoute | None:

@@ -35,10 +35,11 @@ L'intégration utilise plusieurs sources officielles T2C / transport.data.gouv.f
 | Perturbations d'une ligne | `https://api.t2c.fr/siv/alerts/by-line/{line_id}?type=Trafic` |
 | Informations réseau | `https://api.t2c.fr/siv/alerts/banners` |
 
-Le flux QR Code renvoie les passages affichés par les panneaux T2C. Le GTFS
-statique est utilisé pour les sélecteurs, les couleurs de ligne et la
-correspondance entre le nom public de ligne (`E4`) et l'identifiant API interne
-(`9`).
+Le flux QR Code renvoie les passages affichés par les panneaux T2C, parfois
+pour plusieurs lignes au même arrêt. L'intégration filtre ces passages avec la
+ligne et la direction configurées. Le GTFS statique est utilisé pour les
+sélecteurs, les couleurs de ligne et la correspondance entre le nom public de
+ligne (`E4`) et l'identifiant API interne (`9`).
 
 ## Installation via HACS
 
@@ -100,7 +101,7 @@ Informations réseau
 | Entité | Etat | Description |
 | --- | --- | --- |
 | `Prochain passage` | Minutes | Temps restant avant le prochain passage non annulé. |
-| `Passages disponibles` | Nombre | Nombre de passages actuellement fournis par l'API. |
+| `Passages disponibles` | Nombre | Nombre de passages correspondant à la ligne et à la direction configurées. |
 | `Perturbations ligne` | Titre ou `Aucune perturbation` | Première perturbation de la ligne configurée. |
 | `Passage 1` | Temps restant | Premier passage. |
 | `Passage 2..X` | Heure de passage | Passages suivants. |
@@ -186,9 +187,9 @@ caractères.
 
 ### Alertes par passage
 
-Les passages peuvent appartenir à une autre ligne que celle configurée lorsque
-l'API QR Code renvoie plusieurs lignes sur le même arrêt. L'intégration tente de
-rattacher chaque passage à l'alerte de sa propre ligne :
+Les passages sont filtrés sur la ligne et la direction configurées, même lorsque
+l'API QR Code renvoie plusieurs lignes au même arrêt. L'intégration rattache
+ensuite chaque passage à l'alerte de sa ligne :
 
 - mapping du nom public vers l'identifiant réel (`E4` -> `9`) ;
 - récupération des alertes via `alerts/by-line/{route_id}` ;
