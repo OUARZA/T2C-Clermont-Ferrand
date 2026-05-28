@@ -38,6 +38,13 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Return the options flow."""
+        return T2CClermontFerrandOptionsFlow(config_entry)
+
     def __init__(self) -> None:
         """Initialize the flow."""
         self._routes: dict[str, T2CRoute] = {}
@@ -309,6 +316,70 @@ class T2CClermontFerrandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return None
 
 
+class T2CClermontFerrandOptionsFlow(config_entries.OptionsFlow):
+    """Handle options for T2C Clermont-Ferrand."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize the options flow."""
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Manage configured stops."""
+        return await self.async_step_remove_stop(user_input)
+
+    async def async_step_remove_stop(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Remove one configured stop from the hub entry."""
+        configured_stops = _configured_stops(self._config_entry.data)
+
+        if not configured_stops:
+            return self.async_abort(reason="no_stops")
+
+        stop_options = [
+            SelectOptionDict(
+                value=_stop_key(stop),
+                label=_format_stop_label(stop),
+            )
+            for stop in configured_stops
+        ]
+
+        if user_input is not None:
+            stop_key = user_input["stop_key"]
+            updated_stops = [
+                stop for stop in configured_stops if _stop_key(stop) != stop_key
+            ]
+
+            self.hass.config_entries.async_update_entry(
+                self._config_entry,
+                data={
+                    **self._config_entry.data,
+                    CONF_STOPS: updated_stops,
+                },
+            )
+            self.hass.async_create_task(
+                self.hass.config_entries.async_reload(self._config_entry.entry_id)
+            )
+            return self.async_create_entry(title="", data={})
+
+        schema = vol.Schema(
+            {
+                vol.Required("stop_key"): SelectSelector(
+                    SelectSelectorConfig(options=stop_options)
+                )
+            }
+        )
+
+        return self.async_show_form(
+            step_id="remove_stop",
+            data_schema=schema,
+        )
+
+
 def _format_entry_title() -> str:
     """Format the Home Assistant config entry title."""
     return "T2C - Clermont-Ferrand"
@@ -327,4 +398,13 @@ def _stop_key(stop_data: dict[str, Any]) -> str:
     return "_".join(
         str(stop_data.get(key, ""))
         for key in (CONF_LINE_ID, CONF_DIRECTION_ID, CONF_STOP_ID)
+    )
+
+
+def _format_stop_label(stop_data: dict[str, Any]) -> str:
+    """Return a readable label for a configured stop."""
+    return (
+        f"Ligne {stop_data.get(CONF_LINE_NAME, '?')} - "
+        f"Direction {stop_data.get(CONF_DIRECTION_NAME, '?')} - "
+        f"Arrêt {stop_data.get(CONF_STOP_NAME, '?')}"
     )

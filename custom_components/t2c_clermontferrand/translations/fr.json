@@ -39,5 +39,19 @@
       "cannot_connect": "Impossible de charger les données officielles T2C.",
       "stop_added": "L'arrêt a été ajouté au service T2C Clermont-Ferrand."
     }
+  },
+  "options": {
+    "step": {
+      "remove_stop": {
+        "title": "Supprimer un arrêt suivi",
+        "description": "Sélectionnez l'arrêt à retirer de l'intégration T2C Clermont-Ferrand.",
+        "data": {
+          "stop_key": "Arrêt suivi"
+        }
+      }
+    },
+    "abort": {
+      "no_stops": "Aucun arrêt suivi n'est configuré."
+    }
   }
 }

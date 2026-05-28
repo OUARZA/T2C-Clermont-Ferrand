@@ -77,10 +77,13 @@ Depuis Home Assistant :
 2. Sélectionner une ligne.
 3. Sélectionner une direction.
 4. Sélectionner un arrêt.
-5. Choisir le nombre de prochains passages à afficher.
+5. Choisir le nombre de prochains passages à afficher, de 1 à 20.
 
 Si une entrée `T2C - Clermont-Ferrand` existe déjà, un nouvel arrêt est ajouté
 au même service au lieu de créer une nouvelle entrée séparée.
+
+Pour supprimer un arrêt suivi, ouvrir l'intégration `T2C Clermont-Ferrand`,
+cliquer sur `Configurer`, puis choisir l'arrêt à retirer.
 
 ## Appareils et entités
 
@@ -150,7 +153,9 @@ Chaque capteur `Passage X` expose notamment :
 ## Attribut `departures`
 
 Le capteur `Passages disponibles` expose un attribut `departures`, pratique pour
-construire un tableau Lovelace.
+construire un tableau Lovelace. Lorsque la ligne et la direction sont filtrées,
+l'intégration interroge plus largement l'API QR Code avant filtrage afin de
+réduire les faux `Fin de service`.
 
 Chaque ligne contient notamment :
 
