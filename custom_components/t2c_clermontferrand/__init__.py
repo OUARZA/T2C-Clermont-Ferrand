@@ -10,9 +10,17 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceEntry
 
 from .api import T2CClient
-from .const import CONF_STOPS, DOMAIN, GLOBAL_ENTRY_ID
+from .const import (
+    CONF_DIRECTION_ID,
+    CONF_LINE_ID,
+    CONF_STOP_ID,
+    CONF_STOPS,
+    DOMAIN,
+    GLOBAL_ENTRY_ID,
+)
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
@@ -95,6 +103,36 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
+async def async_remove_config_entry_device(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    device_entry: DeviceEntry,
+) -> bool:
+    """Remove a configured stop when its Home Assistant device is deleted."""
+    device_keys = {
+        identifier
+        for domain, identifier in device_entry.identifiers
+        if domain == DOMAIN
+    }
+    configured_stops = _configured_stops(entry)
+    updated_stops = [
+        stop for stop in configured_stops if _stop_key(stop) not in device_keys
+    ]
+
+    if len(updated_stops) == len(configured_stops):
+        return False
+
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            CONF_STOPS: updated_stops,
+        },
+    )
+    hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
+    return True
+
+
 def _configured_stops(entry: ConfigEntry) -> list[dict[str, Any]]:
     """Return configured stops, supporting legacy one-stop entries."""
     stops = entry.data.get(CONF_STOPS)
@@ -107,5 +145,5 @@ def _stop_key(stop_data: dict[str, Any]) -> str:
     """Return a stable identifier for a configured stop."""
     return "_".join(
         str(stop_data.get(key, ""))
-        for key in ("line_id", "direction_id", "stop_id")
+        for key in (CONF_LINE_ID, CONF_DIRECTION_ID, CONF_STOP_ID)
     )

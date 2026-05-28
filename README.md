@@ -84,6 +84,8 @@ au même service au lieu de créer une nouvelle entrée séparée.
 
 Pour supprimer un arrêt suivi, ouvrir l'intégration `T2C Clermont-Ferrand`,
 cliquer sur `Configurer`, puis choisir l'arrêt à retirer.
+Home Assistant peut aussi proposer la suppression directement depuis la fiche de
+l'appareil de l'arrêt suivi.
 
 ## Appareils et entités
 
