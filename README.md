@@ -163,6 +163,9 @@ Pour éviter les avertissements Recorder de Home Assistant, cet attribut reste
 compact : les données brutes complètes ne sont pas dupliquées et `alert_text`
 est tronqué dans la liste `departures`.
 
+Les capteurs `Passage X` conservent la couleur officielle de la ligne même
+lorsqu'ils affichent `Fin de service`.
+
 Chaque ligne contient notamment :
 
 ```yaml

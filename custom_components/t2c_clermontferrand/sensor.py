@@ -50,7 +50,10 @@ from .const import (
     ATTR_VEHICLE_ID,
     CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_NAME,
+    CONF_LINE_COLOR,
+    CONF_LINE_ID,
     CONF_LINE_NAME,
+    CONF_LINE_TEXT_COLOR,
     CONF_STOP_NAME,
     DEFAULT_DEPARTURE_LIMIT,
     DOMAIN,
@@ -60,6 +63,7 @@ from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
 NO_NETWORK_INFORMATION = "Pas d'information du réseau T2C"
 MAX_DEPARTURE_ALERT_TEXT_LENGTH = 500
+MAX_MESSAGE_CONTENT_LENGTH = 300
 
 
 async def async_setup_entry(
@@ -167,8 +171,8 @@ class T2CNextPassageSensor(T2CBaseSensor):
 
         return {
             ATTR_LINE: first.get("route_name") or self._stop_data.get(CONF_LINE_NAME),
-            ATTR_ROUTE_COLOR: first.get("route_color"),
-            ATTR_ROUTE_TEXT_COLOR: first.get("route_text_color"),
+            ATTR_ROUTE_COLOR: _line_color(self.coordinator, self._stop_data),
+            ATTR_ROUTE_TEXT_COLOR: _line_text_color(self.coordinator, self._stop_data),
             ATTR_DIRECTION: self._stop_data.get(CONF_DIRECTION_NAME),
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_DESTINATION: first.get("destination"),
@@ -178,7 +182,13 @@ class T2CNextPassageSensor(T2CBaseSensor):
             ATTR_REALTIME: first.get("realtime"),
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
-            ATTR_MESSAGES: _messages(self.coordinator),
+            ATTR_MESSAGES: _format_message_table(
+                _messages(
+                    self.coordinator,
+                    line_id=self._stop_data.get(CONF_LINE_ID),
+                    line_name=self._stop_data.get(CONF_LINE_NAME),
+                )
+            ),
         }
 
 
@@ -211,13 +221,19 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
                 if data
                 else self._stop_data.get(CONF_LINE_NAME)
             ),
-            ATTR_ROUTE_COLOR: data[0].get("route_color") if data else None,
-            ATTR_ROUTE_TEXT_COLOR: data[0].get("route_text_color") if data else None,
+            ATTR_ROUTE_COLOR: _line_color(self.coordinator, self._stop_data),
+            ATTR_ROUTE_TEXT_COLOR: _line_text_color(self.coordinator, self._stop_data),
             ATTR_DIRECTION: self._stop_data.get(CONF_DIRECTION_NAME),
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
-            ATTR_MESSAGES: _messages(self.coordinator),
+            ATTR_MESSAGES: _format_message_table(
+                _messages(
+                    self.coordinator,
+                    line_id=self._stop_data.get(CONF_LINE_ID),
+                    line_name=self._stop_data.get(CONF_LINE_NAME),
+                )
+            ),
         }
 
 
@@ -361,9 +377,9 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         departure = self._departure or {}
         return {
             ATTR_LINE: departure.get("route_name") or self._stop_data.get(CONF_LINE_NAME),
-            ATTR_ROUTE_ID: departure.get("route_id"),
-            ATTR_ROUTE_COLOR: departure.get("route_color"),
-            ATTR_ROUTE_TEXT_COLOR: departure.get("route_text_color"),
+            ATTR_ROUTE_ID: departure.get("route_id") or self._stop_data.get(CONF_LINE_ID),
+            ATTR_ROUTE_COLOR: _line_color(self.coordinator, self._stop_data),
+            ATTR_ROUTE_TEXT_COLOR: _line_text_color(self.coordinator, self._stop_data),
             ATTR_DIRECTION: self._stop_data.get(CONF_DIRECTION_NAME),
             ATTR_STOP: self._stop_data[CONF_STOP_NAME],
             ATTR_STOP_ID: departure.get("stop_id"),
@@ -444,6 +460,28 @@ def _format_alert_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return alerts
 
 
+def _format_message_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return compact stop messages for recorder-friendly attributes."""
+    messages: list[dict[str, Any]] = []
+
+    for item in data:
+        messages.append(
+            {
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "content": _truncate_text(
+                    item.get("content"),
+                    MAX_MESSAGE_CONTENT_LENGTH,
+                ),
+                "valid_from": item.get("valid_from"),
+                "valid_until": item.get("valid_until"),
+                "scope": item.get("scope"),
+            }
+        )
+
+    return messages
+
+
 def _truncate_text(value: Any, max_length: int) -> str | None:
     """Return a bounded text attribute to keep recorder payloads small."""
     if not isinstance(value, str):
@@ -493,6 +531,44 @@ def _departures(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
     return data.get("departures", [])
 
 
+def _line_color(
+    coordinator: T2CDataUpdateCoordinator,
+    stop_data: dict[str, Any],
+) -> str | None:
+    """Return the configured line color, falling back to live departures."""
+    return _line_attribute(coordinator, stop_data, ATTR_ROUTE_COLOR, CONF_LINE_COLOR)
+
+
+def _line_text_color(
+    coordinator: T2CDataUpdateCoordinator,
+    stop_data: dict[str, Any],
+) -> str | None:
+    """Return the configured line text color, falling back to live departures."""
+    return _line_attribute(
+        coordinator,
+        stop_data,
+        ATTR_ROUTE_TEXT_COLOR,
+        CONF_LINE_TEXT_COLOR,
+    )
+
+
+def _line_attribute(
+    coordinator: T2CDataUpdateCoordinator,
+    stop_data: dict[str, Any],
+    departure_key: str,
+    config_key: str,
+) -> str | None:
+    """Return a line attribute from config or the first available departure."""
+    if value := stop_data.get(config_key):
+        return str(value)
+
+    for departure in _departures(coordinator):
+        if value := departure.get(departure_key):
+            return str(value)
+
+    return None
+
+
 def _active_departures(
     coordinator: T2CDataUpdateCoordinator,
 ) -> list[dict[str, Any]]:
@@ -504,10 +580,25 @@ def _active_departures(
     ]
 
 
-def _messages(coordinator: T2CDataUpdateCoordinator) -> list[dict[str, Any]]:
+def _messages(
+    coordinator: T2CDataUpdateCoordinator,
+    *,
+    line_id: str | None = None,
+    line_name: str | None = None,
+) -> list[dict[str, Any]]:
     """Return information messages from coordinator data."""
     data = coordinator.data or {}
-    return data.get("messages", [])
+    messages = data.get("messages", [])
+    if not line_id and not line_name:
+        return messages
+
+    line_refs = {value for value in (line_id, line_name) if value}
+    return [
+        message
+        for message in messages
+        if not message.get("line_refs")
+        or line_refs.intersection(str(ref) for ref in message.get("line_refs", []))
+    ]
 
 
 def _network_messages(

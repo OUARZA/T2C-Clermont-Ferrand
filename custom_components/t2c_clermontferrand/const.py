@@ -18,6 +18,8 @@ LINE_ALERTS_API_URL = "https://api.t2c.fr/siv/alerts/by-line/{line_id}"
 
 CONF_LINE_NAME = "line_name"
 CONF_LINE_ID = "line_id"
+CONF_LINE_COLOR = "line_color"
+CONF_LINE_TEXT_COLOR = "line_text_color"
 CONF_DIRECTION_NAME = "direction_name"
 CONF_DIRECTION_ID = "direction_id"
 CONF_STOP_NAME = "stop_name"
