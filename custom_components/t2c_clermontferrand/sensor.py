@@ -32,7 +32,6 @@ from .const import (
     ATTR_MINUTES,
     ATTR_INFO,
     ATTR_NEXT_PASSAGES,
-    ATTR_RAW_PASSAGES,
     ATTR_REALTIME,
     ATTR_ROUTE_COLOR,
     ATTR_ROUTE_ID,
@@ -60,6 +59,7 @@ from .const import (
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
 
 NO_NETWORK_INFORMATION = "Pas d'information du réseau T2C"
+MAX_DEPARTURE_ALERT_TEXT_LENGTH = 500
 
 
 async def async_setup_entry(
@@ -179,8 +179,6 @@ class T2CNextPassageSensor(T2CBaseSensor):
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
             ATTR_MESSAGES: _messages(self.coordinator),
-            ATTR_ALERTS: _alerts(self.coordinator),
-            ATTR_RAW_PASSAGES: data,
         }
 
 
@@ -220,8 +218,6 @@ class T2CUpcomingPassagesSensor(T2CBaseSensor):
             ATTR_NEXT_PASSAGES: [item.get("label") for item in data],
             ATTR_DEPARTURES: _format_departure_table(data),
             ATTR_MESSAGES: _messages(self.coordinator),
-            ATTR_ALERTS: _alerts(self.coordinator),
-            ATTR_RAW_PASSAGES: data,
         }
 
 
@@ -383,7 +379,7 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
             ATTR_ALERT_TITLE: departure.get("alert_title"),
             ATTR_ALERT_TEXT: departure.get("alert_text"),
             ATTR_UPDATED_AT: departure.get("alert_updated_at"),
-            ATTR_ALERTS: departure.get("line_alerts"),
+            ATTR_ALERTS: _format_alert_table(departure.get("line_alerts") or []),
             ATTR_STATUS: departure.get("status"),
             ATTR_THEORETICAL: departure.get("theoretical"),
             ATTR_REALTIME: departure.get("realtime"),
@@ -416,7 +412,10 @@ def _format_departure_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "has_alert": item.get("has_alert"),
                 "alert_icon": item.get("alert_icon"),
                 "alert_title": item.get("alert_title"),
-                "alert_text": item.get("alert_text"),
+                "alert_text": _truncate_text(
+                    item.get("alert_text"),
+                    MAX_DEPARTURE_ALERT_TEXT_LENGTH,
+                ),
                 "alert_updated_at": item.get("alert_updated_at"),
                 "etat": item.get("status"),
                 "theorique": item.get("theoretical"),
@@ -425,6 +424,34 @@ def _format_departure_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         )
 
     return departures
+
+
+def _format_alert_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return compact alert attributes for a departure."""
+    alerts: list[dict[str, Any]] = []
+
+    for item in data:
+        alerts.append(
+            {
+                "id": item.get("id"),
+                "title": item.get("title"),
+                "type": item.get("type"),
+                "level": item.get("disruption_level"),
+                "updated_at": item.get("updated_at"),
+            }
+        )
+
+    return alerts
+
+
+def _truncate_text(value: Any, max_length: int) -> str | None:
+    """Return a bounded text attribute to keep recorder payloads small."""
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if len(value) <= max_length:
+        return value
+    return f"{value[: max_length - 1].rstrip()}…"
 
 
 def _parse_datetime(value: Any) -> datetime | None:

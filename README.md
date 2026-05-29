@@ -150,7 +150,7 @@ Chaque capteur `Passage X` expose notamment :
 | `alert_title` | Titre de l'alerte applicable. |
 | `alert_text` | Texte de l'alerte applicable. |
 | `updated_at` | Date de mise à jour de l'alerte applicable. |
-| `alerts` | Liste brute des alertes applicables au passage. |
+| `alerts` | Liste compacte des alertes applicables au passage. |
 
 ## Attribut `departures`
 
@@ -158,6 +158,10 @@ Le capteur `Passages disponibles` expose un attribut `departures`, pratique pour
 construire un tableau Lovelace. Lorsque la ligne et la direction sont filtrées,
 l'intégration interroge plus largement l'API QR Code avant filtrage afin de
 réduire les faux `Fin de service`.
+
+Pour éviter les avertissements Recorder de Home Assistant, cet attribut reste
+compact : les données brutes complètes ne sont pas dupliquées et `alert_text`
+est tronqué dans la liste `departures`.
 
 Chaque ligne contient notamment :
 
@@ -204,7 +208,8 @@ ensuite chaque passage à l'alerte de sa ligne :
   mentionne une direction différente.
 
 Ces informations sont exposées via `has_alert`, `alert_icon`, `alert_title`,
-`alert_text` et `alerts`.
+`alert_text` et `alerts`. Le détail complet des perturbations reste disponible
+sur le capteur `Perturbations ligne`.
 
 ## Informations réseau
 
