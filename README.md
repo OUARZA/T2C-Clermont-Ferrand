@@ -262,7 +262,7 @@ contiennent notamment :
 ## Notes techniques
 
 - Domaine Home Assistant : `t2c_clermontferrand`.
-- Version actuelle : `0.2.0`.
+- Version actuelle : `0.2.9`.
 - Rafraîchissement par défaut : toutes les minutes.
 - Type d'intégration : `service`.
 - Classe IoT : `cloud_polling`.
