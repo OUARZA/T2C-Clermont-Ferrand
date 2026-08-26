@@ -544,6 +544,7 @@ def _parse_timetable_departures(
 ) -> list[T2CDeparture]:
     """Parse departures from the T2C timetable JSON API."""
     departures: list[T2CDeparture] = []
+    fallback_departures: list[T2CDeparture] = []
     now_ts = int(time.time())
     timetable = data.get("timetable")
 
@@ -578,27 +579,32 @@ def _parse_timetable_departures(
 
         if route_id and resolved_route_id != route_id:
             continue
+
+        departure = T2CDeparture(
+            route_id=resolved_route_id,
+            route_name=route.short_name if route else line_ref,
+            route_color=route.color if route else None,
+            route_text_color=route.text_color if route else None,
+            stop_id=data.get("referential_parameter", {}).get("stop_id", ""),
+            destination=destination,
+            due_at=due_at,
+            minutes=minutes,
+            realtime=estimated_at is not None and theoretical is False,
+            scheduled_at=scheduled_at,
+            estimated_at=estimated_at,
+            status=status,
+            theoretical=theoretical,
+            info=info,
+        )
+
         if direction_name and not _same_direction(destination, direction_name):
+            fallback_departures.append(departure)
             continue
 
-        departures.append(
-            T2CDeparture(
-                route_id=resolved_route_id,
-                route_name=route.short_name if route else line_ref,
-                route_color=route.color if route else None,
-                route_text_color=route.text_color if route else None,
-                stop_id=data.get("referential_parameter", {}).get("stop_id", ""),
-                destination=destination,
-                due_at=due_at,
-                minutes=minutes,
-                realtime=estimated_at is not None and theoretical is False,
-                scheduled_at=scheduled_at,
-                estimated_at=estimated_at,
-                status=status,
-                theoretical=theoretical,
-                info=info,
-            )
-        )
+        departures.append(departure)
+
+    if direction_name and len(departures) < limit:
+        departures.extend(fallback_departures[: limit - len(departures)])
 
     return departures[:limit]
 
