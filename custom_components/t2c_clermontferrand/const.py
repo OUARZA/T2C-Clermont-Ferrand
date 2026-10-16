@@ -13,7 +13,7 @@ GTFS_RT_TRIP_UPDATES_URL = (
     "t2c-clermont-gtfs-rt-trip-update"
     "?token=xdgqKBTAzhw4DSPz6zeGc4c5eW0LhwztcGv4-vpzP4U"
 )
-QR_TIMETABLE_API_URL = "https://qrcode.t2c.fr/api/timetable"
+STOP_API_URL = "https://api.t2c.fr/siv/stops/{stop_id}"
 LINE_ALERTS_API_URL = "https://api.t2c.fr/siv/alerts/by-line/{line_id}"
 
 CONF_LINE_NAME = "line_name"
@@ -28,7 +28,7 @@ CONF_DEPARTURE_LIMIT = "departure_limit"
 CONF_STOPS = "stops"
 
 DEFAULT_SCAN_INTERVAL_MINUTES = 1
-DEFAULT_DEPARTURE_LIMIT = 5
+DEFAULT_DEPARTURE_LIMIT = 6
 MIN_DEPARTURE_LIMIT = 1
 MAX_DEPARTURE_LIMIT = 20
 

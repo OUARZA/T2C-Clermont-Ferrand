@@ -1,0 +1,34 @@
+[
+  {
+    "id": "1.33548.2",
+    "type": "Trafic",
+    "title": "Travaux InspiRe boulevard Charles de Gaulle à Cournon jusqu'au vendredi 23 octobre",
+    "text": "<p>En raison des travaux InspiRe bd Charles de Gaulle à Cournon, l'itinéraire de la ligne C est modifié <u>jusqu'au vendredi 23 octobre</u> :</p><ol><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>les arrêts<strong> Sarliève</strong> sont reportés sur les arrêts Pont de Sarliève, situés av. Ernest Cristal</li><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>les arrêts <strong>Grande Halle Zénith</strong>,<strong> Gare de Cournon</strong>,<strong> Germaine Tillon</strong>,<strong> Alouettes</strong> sont reportés sur les arrêts Chaux Blanche, situés av. d’Aubière, proche carrefour avec l'av. du Maréchal Leclerc</li><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>les arrêts <strong>Rosa Bonheur </strong>sont reportés sur les arrêts provisoires Route du Cendre, situés route du Cendre, proche du carrefour avec l'av. du Midi</li><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>l'arrêt <strong>Lac </strong>direction COURNON Allier est reporté sur l'arrêt Lac de la ligne P38 direction MUR-SUR-ALLIER Font Grande, situé av. de la Libération</li><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>l'arrêt <strong>Lac</strong> direction DURTOL Clinique est reporté sur l'arrêt Midi de la ligne P38 direction PÉRIGNAT-ÈS-ALLIER La Garde, situé av. du Midi</li><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>l'arrêt <strong>Samuel Paty </strong>direction DURTOL Clinique est reporté sur l'arrêt Samuel Paty de la ligne P38 direction PÉRIGNAT-ÈS-ALLIER La Garde, situé av. du Midi</li></ol><p><br></p><p><strong style=\"color: rgb(29, 29, 31);\">A compter du samedi 10 octobre, du lundi au samedi de 6h30 à 9h10 et de 16h à 19h20, une navette effectuera son départ et son arrivée de l'arrêt provisoire situé au niveau du studio 120 sur la rue de Sarliève en passant par l'arrêt Emile Coulaudon ligne C direction DURTOL Clinique.</strong></p><p><strong style=\"color: rgb(29, 29, 31);\">Consulter l'itinéraire, </strong><strong style=\"color: inherit;\"><u><a href=\"https://www.t2c.fr/actualites/navette-ligne-c-2\" rel=\"noopener noreferrer\" target=\"_blank\">cliquer ici </a></u></strong></p><p><span style=\"color: rgb(29, 29, 31);\">À partir du 10 octobre, la navette ligne C n’effectuera plus l’arrêt Chaux Blanche</span></p>",
+    "start_datetime": "2026-09-29T17:44:00.000Z",
+    "end_datetime": "9999-12-31T22:59:59.000Z",
+    "priority": 1,
+    "affected_routes": [
+      "C"
+    ],
+    "disruption_level": "moderate",
+    "forwarding": null,
+    "created_at": "2026-09-29T17:44:03.452Z",
+    "updated_at": "2026-10-13T15:53:30.000Z"
+  },
+  {
+    "id": "1.32583.2",
+    "type": "Trafic",
+    "title": "Travaux avenue Jules Ferry à Cournon à compter du 4 mai 2026",
+    "text": "<p>En raison de travaux Inspire avenue Jules Ferry à Cournon, les bus de la ligne C seront déviés dans les 2 sens à compter <u>du lundi 4 mai 2026.</u></p><p><br></p><p><strong>En direction de DURTOL Clinique</strong></p><ol><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>L’arrêt <strong>Alice Milliat </strong>sera reporté sur l'arrêt Victor Hugo, situé rue Victor Hugo à proximité du carrefour avec l'avenue Jean Moulin.</li><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>Les arrêts <strong>Lycée René Descartes</strong> et <strong>COURNON Allier</strong> seront reportés sur l'arrêt provisoire COURNON Allier (arrêt et terminus de descente)*.</li></ol><p><br></p><p><strong>En direction de COURNON Allier</strong></p><ol><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>L’arrêt <strong>Alice Milliat </strong>sera reporté sur l'arrêt provisoire Victor Hugo*, situé rue Victor Hugo à proximité du carrefour avec l'avenue Jean Moulin.</li><li data-list=\"bullet\"><span class=\"ql-ui\" contenteditable=\"false\"></span>L’arrêt <strong>Lycée René Descartes</strong> ne sera pas desservi.</li></ol><p><br></p><p>*Arrêts provisoires non accessibles aux Personnes à Mobilité Réduite.</p>",
+    "start_datetime": "2026-04-29T13:58:00.000Z",
+    "end_datetime": "9999-12-31T22:59:59.000Z",
+    "priority": 1,
+    "affected_routes": [
+      "C"
+    ],
+    "disruption_level": "moderate",
+    "forwarding": null,
+    "created_at": "2026-07-01T13:36:02.914Z",
+    "updated_at": "2026-10-09T07:40:59.000Z"
+  }
+]

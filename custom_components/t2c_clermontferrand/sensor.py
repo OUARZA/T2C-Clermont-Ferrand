@@ -13,6 +13,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
+from .api import T2C_TIME_ZONE
 from .const import (
     ATTR_AFFECTED_ROUTES,
     ATTR_ALERT_ICON,
@@ -513,8 +514,7 @@ def _format_departure_time(item: dict[str, Any], due_at: datetime | None) -> str
     if due_at is None:
         return None
 
-    prefix = "*" if item.get("theoretical") else ""
-    return f"{prefix}{dt_util.as_local(due_at).strftime('%H:%M')}"
+    return due_at.astimezone(T2C_TIME_ZONE).strftime("%H:%M")
 
 
 def _format_departure_info(item: dict[str, Any]) -> str | None:

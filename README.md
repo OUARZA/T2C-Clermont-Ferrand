@@ -9,6 +9,26 @@ L'intégration expose les passages d'une ligne à un arrêt, les perturbations d
 ligne, les informations réseau générales, ainsi que des attributs détaillés
 utilisables dans des cartes Lovelace personnalisées.
 
+## Nouveautés de la version 0.2.13
+
+- Migration des passages vers l’API du site officiel T2C ; suppression des appels QR Code.
+- Récupération des horaires détaillés par ligne pour dépasser les trois passages
+  par sens de la synthèse et remplir le nombre demandé, si le service le permet.
+- Six passages par défaut pour les nouveaux arrêts ; limites existantes conservées.
+- Horaires théoriques disponibles en l’absence d’estimation temps réel, notamment
+  aux Chapelles vers Royat. Distinction explicite pour chaque passage.
+- Tri chronologique selon l’heure effectivement utilisée et conservation des
+  courses à terminus intermédiaire dans la direction configurée.
+- Alertes rattachées à la ligne, comme dans le panneau de course de la cartographie T2C.
+- Configuration, identifiants d’entités et attributs utilisés par la carte conservés.
+
+### Mise à jour depuis 0.2.12
+
+Installer la mise à jour, puis redémarrer Home Assistant. Les arrêts déjà
+configurés sont conservés ; aucune suppression ni recréation n’est nécessaire.
+Un arrêt réglé sur cinq passages reste réglé sur cinq. La carte Lovelace
+appartient à un autre projet et n’est pas modifiée par cette mise à jour.
+
 ## Fonctionnalités
 
 - Configuration depuis l'interface Home Assistant.
@@ -21,7 +41,7 @@ utilisables dans des cartes Lovelace personnalisées.
 - Attributs riches sur chaque passage : ligne, destination, horaires, statut,
   couleurs officielles de ligne et alertes applicables.
 - Capteur `Perturbations ligne` avec état court et détails complets en attributs.
-- Support des passages annulés et des horaires théoriques affichés avec `*`.
+- Support des passages annulés et distinction théorique / temps réel dans les attributs.
 
 ## Sources de données
 
@@ -30,16 +50,83 @@ L'intégration utilise plusieurs sources officielles T2C / transport.data.gouv.f
 | Usage | URL |
 | --- | --- |
 | Métadonnées GTFS | `https://www.data.gouv.fr/api/1/datasets/syndicat-mixte-des-transports-en-commun-de-lagglomeration-clermontoise-smtc-ac-reseau-t2c-gtfs-gtfs-rt/` |
-| GTFS-Realtime Trip Updates | `https://proxy.transport.data.gouv.fr/resource/t2c-clermont-gtfs-rt-trip-update?token=xdgqKBTAzhw4DSPz6zeGc4c5eW0LhwztcGv4-vpzP4U` |
-| Prochains passages QR Code | `https://qrcode.t2c.fr/api/timetable?_stop_code={stop_id}&_limit={limit}` |
+| Prochains passages de la ligne configurée | `https://api.t2c.fr/siv/stops/{parent_stop_id}/routes/{route_id}/departures?dateTime={date_iso_encodee}&direction={direction_id}` |
+| Référence du quai | `https://api.t2c.fr/siv/stops/{stop_id}` |
 | Perturbations d'une ligne | `https://api.t2c.fr/siv/alerts/by-line/{line_id}?type=Trafic` |
 | Informations réseau | `https://api.t2c.fr/siv/alerts/banners` |
 
-Le flux QR Code renvoie les passages affichés par les panneaux T2C, parfois
-pour plusieurs lignes au même arrêt. L'intégration filtre ces passages avec la
-ligne et la direction configurées. Le GTFS statique est utilisé pour les
-sélecteurs, les couleurs de ligne et la correspondance entre le nom public de
-ligne (`E4`) et l'identifiant API interne (`9`).
+Les passages proviennent de l’API du site officiel. À chaque requête,
+`dateTime` contient la date et l’heure courantes en ISO 8601 avec fuseau
+Europe/Paris, encodées comme paramètre d’URL (`+` devient `%2B`).
+Sans ce paramètre obligatoire, le serveur renvoie une erreur 400.
+
+L’arrêt parent est résolu par `parent_station` dans le GTFS statique, puis,
+si nécessaire, par la référence officielle du quai (`parent_station` ou
+`parent_stop_id`). Exemple : `CHAPB → CHAP`. Aucun identifiant n’est tronqué.
+La configuration conserve le quai et la direction déjà enregistrés : aucune
+reconfiguration ni modification des identifiants d’entités n’est nécessaire.
+Le GTFS fournit également les sélecteurs, les couleurs et les noms de ligne.
+
+Les passages de la réponse détaillée sont filtrés par ligne, quai et
+`trip_direction_id`. Le paramètre `direction` est envoyé même pour le sens `0`.
+Aucun filtre `headline` n’est envoyé, afin de conserver les terminus intermédiaires.
+Le nom de destination ne sert pas de filtre : un terminus intermédiaire tel
+que Jules Verne reste admissible dans le même sens qu’Aulnat.
+Tous les passages retenus sont triés par heure effective avant la limite
+configurée. Le serveur peut fournir moins de passages que cette limite.
+
+L’endpoint de synthèse `/siv/stops/{parent_stop_id}/departures` ne fournit
+que trois passages par sens dans les réponses observées (six en additionnant
+les deux sens). L’intégration utilise donc l’endpoint détaillé par ligne :
+sept départs vers Aulnat à Jaude et six vers Royat aux Chapelles ont été
+observés le 15 octobre 2026. Six n’est pas une limite générale de l’API.
+La synthèse reste disponible uniquement pour les appels du client sans ligne.
+
+### Horaires théoriques et temps réel
+
+- `scheduled_at` reprend `theorical_departure_datetime` (orthographe API).
+- `estimated_at` reprend `real_time_stop_time` si la date est valide et le
+  statut est `scheduled`, confirmé avec des estimations réelles.
+- `no_data`, une estimation absente/invalide ou un statut inconnu entraînent
+  un repli théorique. Le champ `real_time: true` ne suffit pas.
+- `due_at` est l’estimation valide, sinon l’horaire théorique. Les minutes
+  sont calculées depuis cet instant. Les dates sont restituées en Europe/Paris.
+- Pour chaque passage : estimation utilisée → `realtime: true`,
+  `theoretical: false` ; horaire théorique utilisé → `realtime: false`,
+  `theoretical: true`, `estimated_at: null`.
+- `cancelled` et `skipped` sont affichés comme annulés par le site officiel.
+  Ils deviennent `status: cancelled` pour les capteurs existants, restent dans
+  la liste avec leur horaire théorique et sont exclus du capteur « Prochain passage ».
+- `real_time_delay` correspond dans les réponses observées à un décalage en
+  secondes, positif ou négatif. Le site utilise la date explicite : l’intégration
+  ne fabrique jamais d’estimation en ajoutant ce délai à l’horaire théorique.
+
+Une liste peut mélanger horaires théoriques et temps réel. Les attributs
+des capteurs et les clés compactes `theorique` / `temps_reel` restent compatibles
+avec la carte Lovelace, qui appartient à un autre projet.
+
+Les passages, les alertes et les informations réseau utilisent uniquement
+`api.t2c.fr`. Le GTFS statique reste nécessaire aux références et aux sélecteurs.
+Aucun appel au flux QR Code n’est effectué.
+
+### Compatibilité des messages
+
+L’attribut `messages` est conservé et alimenté par les alertes de la ligne
+configurée, déjà récupérées pour `Perturbations ligne` : aucune requête
+supplémentaire. Les champs `id`, `title`, `content`, `valid_from`, `valid_until`,
+`line_refs`, `stop_refs` et `scope` sont conservés. Le contenu HTML est converti
+en texte. La portée est explicitement `line` et `stop_refs` reste vide :
+une alerte de ligne ne prouve pas qu’un quai précis est touché.
+
+Les messages restent disponibles même sans prochain passage. En cas d’erreur
+de récupération des alertes, `messages` et `alerts` sont vides, sans masquer
+les passages. Les messages réseau restent sur leur entité dédiée.
+
+Les réponses vérifiées des références d’arrêt et des alertes ne fournissent
+pas d’équivalent confirmé à tous les messages spécifiques d’arrêt du QR Code.
+Ces anciens messages ne sont donc plus récupérés ; cette migration ne garantit
+pas une couverture identique. À Jaude, le message de travaux de la ligne C
+est bien présent dans la nouvelle API, avec la seconde perturbation du bandeau.
 
 ## Installation via HACS
 
@@ -77,7 +164,11 @@ Depuis Home Assistant :
 2. Sélectionner une ligne.
 3. Sélectionner une direction.
 4. Sélectionner un arrêt.
-5. Choisir le nombre de prochains passages à afficher, de 1 à 20.
+5. Choisir le nombre de prochains passages à afficher, de 1 à 20, avec 6 par défaut.
+
+Les limites déjà enregistrées sont conservées : un arrêt configuré sur 5
+reste sur 5. La nouvelle récupération permet de remplir ces cinq passages
+lorsque le service restant le permet.
 
 Si une entrée `T2C - Clermont-Ferrand` existe déjà, un nouvel arrêt est ajouté
 au même service au lieu de créer une nouvelle entrée séparée.
@@ -140,24 +231,37 @@ Chaque capteur `Passage X` expose notamment :
 | `estimated_at` | Heure estimée temps réel si disponible. |
 | `minutes` | Temps restant en minutes. |
 | `info` | Information courte du passage, ou `Aucune info`. |
-| `status` | Statut brut du passage, par exemple `onTime` ou `cancelled`. |
+| `status` | Statut API (`scheduled`, `no_data`…), avec `skipped` normalisé en `cancelled`. |
 | `theoretical` | `true` si l'horaire est théorique. |
-| `realtime` | `true` si une estimation temps réel est disponible. |
+| `realtime` | `true` si une estimation temps réel valide est utilisée. |
 | `trip_id` | Identifiant de course si disponible. |
 | `vehicle_id` | Identifiant véhicule si disponible. |
-| `has_alert` | `true` si une alerte semble applicable au passage. |
+| `has_alert` | `true` si la ligne du passage possède au moins une alerte. |
 | `alert_icon` | Icône suggérée, actuellement `mdi:alert-circle`. |
-| `alert_title` | Titre de l'alerte applicable. |
-| `alert_text` | Texte de l'alerte applicable. |
-| `updated_at` | Date de mise à jour de l'alerte applicable. |
-| `alerts` | Liste compacte des alertes applicables au passage. |
+| `alert_title` | Titre de la première alerte de ligne. |
+| `alert_text` | Texte de la première alerte de ligne. |
+| `updated_at` | Date de mise à jour de la première alerte de ligne. |
+| `alerts` | Liste compacte des alertes de la ligne du passage. |
+
+### Distinguer les horaires dans une carte
+
+Ces attributs sont propres à chaque passage : une liste peut mélanger les deux types.
+
+| Type d’horaire utilisé | `realtime` | `theoretical` | `estimated_at` | `due_at` |
+| --- | --- | --- | --- | --- |
+| Estimation temps réel valide | `true` | `false` | Date estimée | Date estimée |
+| Horaire théorique | `false` | `true` | `null` | Date théorique |
+
+`scheduled_at` conserve la date théorique dans les deux cas. Dans l’attribut
+compact `departures`, les indicateurs équivalents sont `temps_reel` et `theorique`.
+Les heures sont affichées sans astérisque ; utilisez ces attributs pour distinguer
+visuellement les horaires théoriques et temps réel dans une carte.
 
 ## Attribut `departures`
 
 Le capteur `Passages disponibles` expose un attribut `departures`, pratique pour
-construire un tableau Lovelace. Lorsque la ligne et la direction sont filtrées,
-l'intégration interroge plus largement l'API QR Code avant filtrage afin de
-réduire les faux `Fin de service`.
+construire un tableau Lovelace. Les passages sont filtrés puis triés par heure
+effective avant d’appliquer le nombre demandé.
 
 Pour éviter les avertissements Recorder de Home Assistant, cet attribut reste
 compact : les données brutes complètes ne sont pas dupliquées et `alert_text`
@@ -180,7 +284,7 @@ alert_icon: null
 alert_title: null
 alert_text: null
 alert_updated_at: null
-etat: onTime
+etat: scheduled
 theorique: false
 temps_reel: true
 ```
@@ -202,13 +306,26 @@ caractères.
 ### Alertes par passage
 
 Les passages sont filtrés sur la ligne et la direction configurées, même lorsque
-l'API QR Code renvoie plusieurs lignes au même arrêt. L'intégration rattache
+l’API du site renvoie plusieurs lignes au même arrêt. L'intégration rattache
 ensuite chaque passage à l'alerte de sa ligne :
 
 - mapping du nom public vers l'identifiant réel (`E4` -> `9`) ;
 - récupération des alertes via `alerts/by-line/{route_id}` ;
-- filtrage simple pour éviter les alertes d'un autre sens lorsque l'alerte
-  mentionne une direction différente.
+- affichage de toutes les alertes de la ligne, même si leur texte concerne
+  un autre arrêt ou l’autre direction, comme dans les exemples du site T2C.
+
+Vérification dans la cartographie du site : la fiche de l’arrêt seul et la
+liste des départs ne présentent pas ce bloc de perturbations. Il apparaît
+dans le panneau de la course après sélection d’un départ. Les alertes
+affichées sont celles de sa ligne, sans filtre supplémentaire par quai
+ou direction. L’intégration dispose déjà de la ligne dans sa configuration ;
+elle conserve donc aussi ces informations dans `Perturbations ligne` et
+`messages` lorsqu’aucun départ n’est disponible.
+
+Ainsi, un passage INSPÉ Chamalières vers Jules Verne affiche aussi l’alerte
+de report vers Zone des Gravanches. `has_alert` signale une perturbation de
+la ligne, sans garantir que ce passage précis est affecté. Le filtrage des
+horaires par quai et identifiant de direction reste inchangé.
 
 Ces informations sont exposées via `has_alert`, `alert_icon`, `alert_title`,
 `alert_text` et `alerts`. Le détail complet des perturbations reste disponible
@@ -262,7 +379,7 @@ contiennent notamment :
 ## Notes techniques
 
 - Domaine Home Assistant : `t2c_clermontferrand`.
-- Version actuelle : `0.2.12`.
+- Version actuelle : `0.2.13`.
 - Rafraîchissement par défaut : toutes les minutes.
 - Type d'intégration : `service`.
 - Classe IoT : `cloud_polling`.
@@ -271,4 +388,18 @@ L'intégration dépend de :
 
 ```text
 gtfs-realtime-bindings==1.0.0
+```
+
+## Validation de la migration
+
+Les tests utilisent des réponses réelles des Chapelles, de Jaude et de Gare SNCF
+capturées le 15 octobre 2026, complétées par des cas synthétiques (annulations,
+terminus Jules Verne, désordre chronologique, erreurs et données invalides).
+Voir [les observations et sources](tests/fixtures/README.md).
+
+Avec Python 3.12 ou supérieur :
+
+```sh
+python -m pip install -r tests/requirements.txt
+python -m unittest discover -s tests -v
 ```

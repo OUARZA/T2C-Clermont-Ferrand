@@ -1,21 +1,20 @@
-"""API client for T2C Clermont-Ferrand official GTFS feeds."""
+"""API client for T2C website departures and official reference feeds."""
 
 from __future__ import annotations
 
 import asyncio
 import csv
-from dataclasses import dataclass
-from datetime import UTC, datetime
-from html.parser import HTMLParser
-from io import BytesIO, TextIOWrapper
 import logging
 import re
 import time
-import unicodedata
-from typing import Any
-from urllib.parse import urlencode
-from zoneinfo import ZoneInfo
 import zipfile
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from html.parser import HTMLParser
+from io import BytesIO, TextIOWrapper
+from typing import Any
+from urllib.parse import quote, urlencode
+from zoneinfo import ZoneInfo
 
 from aiohttp import ClientError, ClientResponseError, ClientSession
 
@@ -23,7 +22,7 @@ from .const import (
     DATASET_API_URL,
     GTFS_RT_TRIP_UPDATES_URL,
     LINE_ALERTS_API_URL,
-    QR_TIMETABLE_API_URL,
+    STOP_API_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,7 +91,7 @@ class T2CDirection:
 
 @dataclass(slots=True, frozen=True)
 class T2CDeparture:
-    """A next departure parsed from GTFS-Realtime."""
+    """A next departure with separate scheduled and estimated times."""
 
     route_id: str | None
     route_name: str | None
@@ -149,7 +148,7 @@ class T2CDeparture:
 
 @dataclass(slots=True, frozen=True)
 class T2CMessage:
-    """An information message returned by the T2C timetable API."""
+    """A line information message in the existing card-compatible format."""
 
     message_id: str
     title: str
@@ -228,15 +227,17 @@ class _GtfsIndex:
     trip_routes: dict[str, str]
     trip_headsigns: dict[str, str]
     loaded_at: float
+    stop_parents: dict[str, str] = field(default_factory=dict)
 
 
 class T2CClient:
-    """Client for the official T2C static GTFS and GTFS-Realtime feeds."""
+    """Client for official T2C reference, departures and information feeds."""
 
     def __init__(self, session: ClientSession) -> None:
         """Initialize the client."""
         self._session = session
         self._gtfs: _GtfsIndex | None = None
+        self._stop_parents: dict[str, str] = {}
 
     async def async_get_routes(self) -> list[T2CRoute]:
         """Return available T2C routes."""
@@ -322,41 +323,54 @@ class T2CClient:
         stop_id: str,
         limit: int,
         route_id: str | None = None,
-        direction_name: str | None = None,
+        direction_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Return next departures from the T2C timetable API."""
-        fetch_limit = _timetable_fetch_limit(limit, route_id, direction_name)
-        data = await self._async_get_timetable(stop_id, fetch_limit)
+        """Return official website departures for the configured platform."""
         gtfs = await self._async_get_gtfs()
+        parent_id = gtfs.stop_parents.get(stop_id) or self._stop_parents.get(stop_id)
+        if parent_id is None:
+            # Reference lookup also covers older configurations absent from GTFS.
+            records = await self._async_get_json_list(
+                STOP_API_URL.format(stop_id=quote(stop_id, safe=""))
+            )
+            record = next(
+                (
+                    item
+                    for item in records
+                    if isinstance(item, dict) and item.get("stop_id") == stop_id
+                ),
+                None,
+            )
+            if record is None:
+                raise T2CDataError(f"Unable to resolve parent stop for {stop_id}")
+            parent_id = record.get("parent_station") or record.get("parent_stop_id")
+            if not parent_id and record.get("location_type") == 1:
+                parent_id = stop_id
+            if not isinstance(parent_id, str) or not parent_id:
+                raise T2CDataError(f"Missing parent stop for {stop_id}")
+            self._stop_parents[stop_id] = parent_id
+
+        params = {"dateTime": datetime.now(T2C_TIME_ZONE).isoformat()}
+        url = STOP_API_URL.format(stop_id=quote(parent_id, safe=""))
+        if route_id is not None:
+            # The stop overview only returns three departures per direction.
+            # The detailed line endpoint returns the remaining service instead.
+            url += f"/routes/{quote(str(route_id), safe='')}"
+            if direction_id is not None:
+                params["direction"] = str(direction_id)
+        query = urlencode(params)
+        data = await self._async_get_json_list(f"{url}/departures?{query}")
+        if route_id is not None:
+            data = _group_route_departures(data, str(route_id))
         departures = _parse_timetable_departures(
             data,
             gtfs,
             limit,
+            stop_id=stop_id,
             route_id=route_id,
-            direction_name=direction_name,
-        )
-        _LOGGER.debug(
-            "Parsed %s T2C timetable departures for stop=%s",
-            len(departures),
-            stop_id,
+            direction_id=direction_id,
         )
         return [departure.as_dict() for departure in departures]
-
-    async def async_get_stop_messages(
-        self,
-        *,
-        stop_id: str,
-        limit: int,
-    ) -> list[dict[str, Any]]:
-        """Return information messages from the T2C timetable API."""
-        data = await self._async_get_timetable(stop_id, limit)
-        messages = _parse_timetable_messages(data)
-        _LOGGER.debug(
-            "Parsed %s T2C timetable messages for stop=%s",
-            len(messages),
-            stop_id,
-        )
-        return [message.as_dict() for message in messages]
 
     async def async_get_line_alerts(self, line_id: str) -> list[dict[str, Any]]:
         """Return traffic disruptions for a line from the T2C alerts API."""
@@ -377,11 +391,6 @@ class T2CClient:
         messages = _parse_line_alerts(data)
         _LOGGER.debug("Parsed %s T2C network messages", len(messages))
         return [message.as_dict() for message in messages]
-
-    async def _async_get_timetable(self, stop_id: str, limit: int) -> dict[str, Any]:
-        """Fetch the T2C timetable API for a stop."""
-        query = urlencode({"_stop_code": stop_id, "_limit": limit})
-        return await self._async_get_json(f"{QR_TIMETABLE_API_URL}?{query}")
 
     async def _async_get_gtfs(self) -> _GtfsIndex:
         """Return a cached static GTFS index."""
@@ -415,6 +424,8 @@ class T2CClient:
             async with self._session.get(url, timeout=HTTP_TIMEOUT) as response:
                 response.raise_for_status()
                 data = await response.json()
+        except ValueError as err:
+            raise T2CDataError(f"Invalid JSON from {url}") from err
         except (ClientError, ClientResponseError, TimeoutError) as err:
             raise T2CConnectionError(f"Unable to fetch JSON from {url}") from err
 
@@ -448,7 +459,7 @@ def _parse_gtfs_rt_trip_updates(
 
     try:
         feed.ParseFromString(payload)
-    except Exception as err:  # noqa: BLE001 - protobuf parse exceptions vary
+    except Exception as err:
         raise T2CDataError("Unable to parse T2C GTFS-Realtime FeedMessage") from err
 
     now_ts = int(time.time())
@@ -501,138 +512,118 @@ def _parse_gtfs_rt_trip_updates(
     return departures[:limit]
 
 
-def _parse_timetable_messages(data: dict[str, Any]) -> list[T2CMessage]:
-    """Parse information messages from the T2C timetable JSON API."""
-    messages: list[T2CMessage] = []
-    raw_messages = data.get("message") or []
+def line_alerts_to_messages(
+    alerts: list[dict[str, Any]],
+    line_id: str,
+) -> list[dict[str, Any]]:
+    """Keep the message contract while explicitly retaining line-level scope."""
+    return [
+        T2CMessage(
+            message_id=alert["id"],
+            title=alert["title"],
+            content=alert["text"],
+            valid_from=alert.get("start_datetime"),
+            valid_until=alert.get("end_datetime"),
+            line_refs=list(alert.get("affected_routes") or [line_id]),
+            stop_refs=[],
+        ).as_dict()
+        for alert in alerts
+    ]
 
-    if not isinstance(raw_messages, list):
-        return messages
 
-    for item in raw_messages:
+def _group_route_departures(
+    data: list[dict[str, Any]],
+    route_id: str,
+) -> list[dict[str, Any]]:
+    """Adapt the detailed endpoint's flat list to the shared departure parser."""
+    groups: dict[str, dict[str, Any]] = {}
+    for item in data:
         if not isinstance(item, dict):
-            continue
-
-        title = item.get("title")
-        content = item.get("content")
-
-        if not title or not content:
-            continue
-
-        messages.append(
-            T2CMessage(
-                message_id=str(item.get("id") or ""),
-                title=str(title),
-                content=str(content),
-                valid_from=item.get("valid_start_time"),
-                valid_until=item.get("valid_until_time"),
-                line_refs=list(item.get("list_line_ref") or []),
-                stop_refs=list(item.get("list_stop_point_ref") or []),
-            )
+            raise T2CDataError("Unexpected T2C route departure")
+        item_route_id = str(item.get("route_id") or route_id)
+        group = groups.setdefault(
+            item_route_id,
+            {
+                "route_id": item_route_id,
+                "route_short_name": item.get("route_short_name"),
+                "next_departures": [],
+            },
         )
-
-    return messages
+        group["next_departures"].append(item)
+    return list(groups.values())
 
 
 def _parse_timetable_departures(
-    data: dict[str, Any],
+    data: list[dict[str, Any]],
     gtfs: _GtfsIndex,
     limit: int,
     *,
+    stop_id: str,
     route_id: str | None = None,
-    direction_name: str | None = None,
+    direction_id: str | None = None,
 ) -> list[T2CDeparture]:
-    """Parse departures from the T2C timetable JSON API."""
+    """Filter website departures, then sort by effective instant before limiting."""
+    if not isinstance(data, list):
+        raise T2CDataError("Unexpected T2C departures payload")
     departures: list[T2CDeparture] = []
-    fallback_departures: list[T2CDeparture] = []
-    now_ts = int(time.time())
-    timetable = data.get("timetable")
-
-    if not isinstance(timetable, dict):
-        raise T2CDataError("Unexpected T2C timetable API payload")
-
-    raw_departures = timetable.get("timetable") or []
-
-    if not isinstance(raw_departures, list):
-        raise T2CDataError("Unexpected T2C timetable API payload")
-
-    for item in raw_departures:
-        if not isinstance(item, dict):
-            continue
-
-        due_at = _parse_t2c_datetime(
-            item.get("datetime_estimated") or item.get("datetime")
-        )
-        if due_at is None:
-            continue
-
-        scheduled_at = _parse_t2c_datetime(item.get("datetime"))
-        estimated_at = _parse_t2c_datetime(item.get("datetime_estimated"))
-        minutes = max(0, round((int(due_at.timestamp()) - now_ts) / 60))
-        status = item.get("departure_status")
-        theoretical = item.get("theorique")
-        info = item.get("info")
-        line_ref = item.get("line_id")
+    now_ts = time.time()
+    for line in data:
+        if not isinstance(line, dict) or not isinstance(
+            line.get("next_departures"), list
+        ):
+            raise T2CDataError("Unexpected T2C departures line")
+        line_ref = str(line.get("route_id") or "")
         route = _find_route(gtfs, line_ref)
         resolved_route_id = route.route_id if route else line_ref
-        destination = item.get("destination")
-
-        if route_id and resolved_route_id != route_id:
+        if route_id is not None and resolved_route_id != str(route_id):
             continue
-
-        departure = T2CDeparture(
-            route_id=resolved_route_id,
-            route_name=route.short_name if route else line_ref,
-            route_color=route.color if route else None,
-            route_text_color=route.text_color if route else None,
-            stop_id=data.get("referential_parameter", {}).get("stop_id", ""),
-            destination=destination,
-            due_at=due_at,
-            minutes=minutes,
-            realtime=estimated_at is not None and theoretical is False,
-            scheduled_at=scheduled_at,
-            estimated_at=estimated_at,
-            status=status,
-            theoretical=theoretical,
-            info=info,
-        )
-
-        if direction_name and not _same_direction(destination, direction_name):
-            fallback_departures.append(departure)
-            continue
-
-        departures.append(departure)
-
-    if direction_name and len(departures) < limit:
-        departures.extend(fallback_departures[: limit - len(departures)])
-
+        for item in line["next_departures"]:
+            if not isinstance(item, dict) or item.get("stop_id") != stop_id:
+                continue
+            if direction_id is not None and str(item.get("trip_direction_id")) != str(
+                direction_id
+            ):
+                continue
+            scheduled_at = _parse_t2c_datetime(item.get("theorical_departure_datetime"))
+            raw_status = item.get("real_time_status")
+            cancelled = raw_status in {"cancelled", "skipped"}
+            # The website excludes cancelled/skipped estimates. no_data is not
+            # a prediction even when the API advertises real_time: true.
+            # scheduled is observed with valid predictions; unknown statuses
+            # conservatively retain the theoretical time. Never add delay.
+            estimated_at = None
+            if raw_status == "scheduled":
+                estimated_at = _parse_t2c_datetime(item.get("real_time_stop_time"))
+            due_at = estimated_at or scheduled_at
+            if due_at is None or due_at.timestamp() < now_ts - 60:
+                continue
+            realtime = estimated_at is not None
+            departures.append(
+                T2CDeparture(
+                    route_id=resolved_route_id,
+                    route_name=route.short_name
+                    if route
+                    else line.get("route_short_name"),
+                    route_color=route.color
+                    if route
+                    else _format_hex_color(line.get("route_color")),
+                    route_text_color=route.text_color
+                    if route
+                    else _format_hex_color(line.get("route_text_color")),
+                    stop_id=stop_id,
+                    destination=item.get("trip_headsign"),
+                    due_at=due_at,
+                    minutes=max(0, round((due_at.timestamp() - now_ts) / 60)),
+                    realtime=realtime,
+                    theoretical=not realtime,
+                    scheduled_at=scheduled_at,
+                    estimated_at=estimated_at,
+                    status="cancelled" if cancelled else raw_status,
+                    trip_id=item.get("trip_id"),
+                )
+            )
+    departures.sort(key=lambda departure: departure.due_at.timestamp())
     return departures[:limit]
-
-
-def _timetable_fetch_limit(
-    limit: int,
-    route_id: str | None,
-    direction_name: str | None,
-) -> int:
-    """Return a larger API limit when local filtering is needed."""
-    if not route_id and not direction_name:
-        return limit
-    return max(limit, min(limit * 5, 50))
-
-
-def _same_direction(value: Any, expected: str) -> bool:
-    """Return whether a timetable destination matches the configured direction."""
-    if not isinstance(value, str):
-        return False
-    return _normalize_text(value) == _normalize_text(expected)
-
-
-def _normalize_text(value: str) -> str:
-    """Return text normalized for matching public T2C labels."""
-    normalized = unicodedata.normalize("NFKD", value)
-    return "".join(
-        char for char in normalized.casefold() if not unicodedata.combining(char)
-    ).strip()
 
 
 def _find_route(gtfs: _GtfsIndex, line_ref: str | None) -> T2CRoute | None:
@@ -719,6 +710,11 @@ def _parse_gtfs_zip(payload: bytes, loaded_at: float) -> _GtfsIndex:
         with zipfile.ZipFile(BytesIO(payload)) as archive:
             routes = _read_routes(archive)
             stops = _read_stops(archive)
+            stop_parents = {
+                row["stop_id"]: row["parent_station"]
+                for row in _read_csv(archive, "stops.txt")
+                if row.get("parent_station")
+            }
             trip_routes, trip_headsigns, trip_directions = _read_trips(archive)
             route_directions = _build_route_directions(
                 trip_routes,
@@ -744,6 +740,7 @@ def _parse_gtfs_zip(payload: bytes, loaded_at: float) -> _GtfsIndex:
         trip_routes=trip_routes,
         trip_headsigns=trip_headsigns,
         loaded_at=loaded_at,
+        stop_parents=stop_parents,
     )
 
 
@@ -907,11 +904,13 @@ def _parse_t2c_datetime(value: Any) -> datetime | None:
         return None
 
     try:
-        parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return None
 
-    return parsed.replace(tzinfo=T2C_TIME_ZONE)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=T2C_TIME_ZONE)
+    return parsed.astimezone(T2C_TIME_ZONE)
 
 
 def _natural_key(value: str) -> list[int | str]:

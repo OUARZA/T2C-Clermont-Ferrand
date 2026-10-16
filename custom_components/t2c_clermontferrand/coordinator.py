@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import logging
-import unicodedata
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import T2CClient, T2CError
+from .api import T2CClient, T2CError, line_alerts_to_messages
 from .const import (
     CONF_DEPARTURE_LIMIT,
-    CONF_DIRECTION_NAME,
+    CONF_DIRECTION_ID,
     CONF_LINE_ID,
     CONF_STOP_ID,
     DEFAULT_DEPARTURE_LIMIT,
@@ -26,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, Any]]]]):
-    """Coordinate polling of T2C GTFS-Realtime departures."""
+    """Coordinate polling of T2C website departures."""
 
     def __init__(
         self,
@@ -59,20 +58,11 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
                 stop_id=self.stop_data[CONF_STOP_ID],
                 limit=departure_limit,
                 route_id=self.stop_data[CONF_LINE_ID],
-                direction_name=self.stop_data.get(CONF_DIRECTION_NAME),
+                direction_id=self.stop_data.get(CONF_DIRECTION_ID),
             )
         except T2CError as err:
             _LOGGER.debug("T2C coordinator update failed", exc_info=True)
             raise UpdateFailed(str(err)) from err
-
-        try:
-            messages = await self.client.async_get_stop_messages(
-                stop_id=self.stop_data[CONF_STOP_ID],
-                limit=departure_limit,
-            )
-        except T2CError:
-            _LOGGER.debug("T2C information messages update failed", exc_info=True)
-            messages = []
 
         line_alerts_by_route: dict[str, list[dict[str, Any]]] = {}
         configured_line_id = self.stop_data[CONF_LINE_ID]
@@ -82,6 +72,8 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
         except T2CError:
             _LOGGER.debug("T2C line alerts update failed", exc_info=True)
             alerts = []
+
+        messages = line_alerts_to_messages(alerts, configured_line_id)
 
         for route_id in _departure_route_ids(departures):
             if route_id in line_alerts_by_route:
@@ -165,11 +157,7 @@ def _attach_line_alerts_to_departures(
     for departure in departures:
         item = dict(departure)
         route_id = str(item.get("route_id") or "")
-        line_alerts = [
-            alert
-            for alert in line_alerts_by_route.get(route_id, [])
-            if _alert_matches_departure(alert, item)
-        ]
+        line_alerts = list(line_alerts_by_route.get(route_id, []))
         first_alert = line_alerts[0] if line_alerts else {}
 
         item["line_alerts"] = line_alerts
@@ -184,35 +172,3 @@ def _attach_line_alerts_to_departures(
         enriched.append(item)
 
     return enriched
-
-
-def _alert_matches_departure(
-    alert: dict[str, Any],
-    departure: dict[str, Any],
-) -> bool:
-    """Return whether a line alert appears to apply to a departure."""
-    text = _normalize_text(
-        " ".join(
-            str(value)
-            for value in (alert.get("title"), alert.get("text"))
-            if value
-        )
-    )
-    destination = _normalize_text(str(departure.get("destination") or ""))
-
-    if not text:
-        return False
-    if "dans les 2 sens" in text or "dans les deux sens" in text:
-        return True
-    if "direction" not in text:
-        return True
-
-    return bool(destination and destination in text)
-
-
-def _normalize_text(value: str) -> str:
-    """Return text normalized for loose matching."""
-    normalized = unicodedata.normalize("NFKD", value)
-    return "".join(
-        char for char in normalized.casefold() if not unicodedata.combining(char)
-    )
