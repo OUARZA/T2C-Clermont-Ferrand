@@ -479,6 +479,20 @@ Les seuls anciens chemins migrés automatiquement sont les suivants ; les param�
 Une URL externe ou un autre dossier n’est jamais supprimé sur la seule base du nom
 JavaScript. Aucun fichier de l’ancienne carte ni fichier utilisateur n’est supprimé.
 
+### Si la carte disparaît après désinstallation de l’ancien paquet
+
+Lors du test sur une instance, une erreur « Custom element doesn't exist » est
+apparue après la désinstallation de l’ancienne carte HACS. La suppression de la
+ressource T2C depuis l’interface, suivie de sa recréation automatique par
+l’intégration, a rétabli la carte. La cause précise n’a pas été établie.
+
+Si cela se produit en gestion des ressources par l’interface : noter l’URL T2C,
+supprimer **uniquement** la ressource de cette carte, recharger l’entrée T2C pour
+la recréer si nécessaire, puis rafraîchir complètement le dashboard. Vérifier
+qu’une seule ressource module sous /t2c_clermontferrand/ est présente. Ne pas
+supprimer les ressources des autres cartes. Pour les ressources YAML, suivre
+la procédure manuelle ci-dessous.
+
 ### Ressources gérées en YAML
 
 La gestion des ressources est indépendante du mode du dashboard : un dashboard YAML

@@ -53,7 +53,7 @@ Les dépendances ont ensuite été installées dans un dossier temporaire et la 
 complète a réussi. Les tests frontend utilisent des doubles aux frontières des API
 Home Assistant. Ils ne constituent **pas** un test de démarrage d’une vraie instance.
 Les tests JavaScript utilisent un environnement minimal, pas un navigateur complet.
-HACS/hassfest restent à vérifier via la CI GitHub ; ils n’ont pas été exécutés localement.
+HACS, hassfest et les régressions ont réussi dans GitHub Actions (run 40127063471, commit aa2c193). HACS/hassfest n’ont pas été exécutés localement.
 
 ## Tests à effectuer sur Home Assistant avant publication
 
@@ -86,7 +86,22 @@ Utiliser une sauvegarde et déployer la branche pour essai ; aucune release n’
 8. **Retour arrière** : restaurer la précédente intégration, l’ancienne carte et une
    seule ancienne ressource selon le README, puis redémarrer/rafraîchir. Vérifier le dashboard.
 
-Le déploiement, les vrais cycles HA, les requêtes HTTP et l’affichage mobile n’ont pas
-été réalisés sur l’instance de Mathieu dans cette session. La version du manifest
+## Résultats rapportés sur l’instance de Mathieu le 24 octobre 2026
+
+- Déploiement manuel du dossier local et redémarrage Home Assistant effectués.
+- Carte affichée après Ctrl+F5 ; éditeur visuel et modification des options confirmés.
+- Une seule ressource module canonique observée, avec empreinte de contenu.
+- Après rechargement de l’entrée, une seule ressource T2C toujours présente.
+- Après désinstallation de l’ancienne carte HACS, erreur « Custom element doesn’t exist ».
+  Mathieu a supprimé la ressource T2C ; il confirme sa recréation automatique et
+  le retour de la carte. La cause exacte de l’incident n’est pas établie.
+- Aucune erreur T2C signalée dans les journaux par Mathieu après ces manipulations.
+
+L’affichage de passages en circulation reste à vérifier : Mathieu indique une
+suspension du service en raison de manifestations. Les tests multi-entrées réels,
+YAML, renouvellement du cache après une nouvelle mise à jour, retour arrière,
+réseau HTTP/console navigateur et affichage Companion ne sont pas confirmés.
+
+ La version du manifest
 reste 0.2.13 : choisir le prochain numéro de version uniquement après validation,
 puis mettre à jour le manifest et préparer la release séparément.
