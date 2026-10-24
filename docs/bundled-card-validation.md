@@ -102,6 +102,6 @@ suspension du service en raison de manifestations. Les tests multi-entrées rée
 YAML, renouvellement du cache après une nouvelle mise à jour, retour arrière,
 réseau HTTP/console navigateur et affichage Companion ne sont pas confirmés.
 
- La version du manifest
-reste 0.2.13 : choisir le prochain numéro de version uniquement après validation,
-puis mettre à jour le manifest et préparer la release séparément.
+ La version du manifest passe à 0.2.14 pour la publication autorisée par Mathieu
+après fusion de la PR et validation des premiers tests sur son instance.
+Les vérifications non confirmées ci-dessus restent des limites de cette validation.

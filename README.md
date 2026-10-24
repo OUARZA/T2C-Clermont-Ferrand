@@ -13,7 +13,22 @@ L'intégration expose les passages d'une ligne à un arrêt, les perturbations d
 ligne, les informations réseau générales, ainsi que des attributs détaillés
 utilisables dans des cartes Lovelace personnalisées.
 
-## Nouveautés de la version 0.2.13
+## Nouveautés de la version 0.2.14
+
+- L’intégration et sa carte Lovelace sont distribuées ensemble dans une seule installation HACS.
+- Ressource module enregistrée automatiquement, sans doublons au démarrage ou au rechargement.
+- Migration des anciens chemins connus de la carte et cache renouvelé selon le contenu du JavaScript.
+- Type de carte, éditeur visuel, options et dashboards existants conservés.
+- **Home Assistant 2026.10.0 minimum.**
+
+### Mise à jour depuis 0.2.13
+
+Installer la mise à jour de l’intégration, redémarrer Home Assistant puis rafraîchir
+complètement les dashboards. Suivre [le guide de migration](#migration-depuis-la-carte-hacs-séparée)
+avant de désinstaller l’ancienne carte HACS. Les ressources YAML nécessitent
+un remplacement manuel ; aucun fichier utilisateur n’est modifié automatiquement.
+
+## Historique — version 0.2.13
 
 - Migration des passages vers l’API du site officiel T2C ; suppression des appels QR Code.
 - Récupération des horaires détaillés par ligne pour dépasser les trois passages
@@ -549,8 +564,8 @@ remplace pas le retrait des ressources anciennes ni le rafraîchissement navigat
 
 HACS reste en catégorie intégration, sans `zip_release` et sans filtre de fichiers :
 il distribue le dossier complet `custom_components/t2c_clermontferrand/`, y compris
-`www/`. Aucun workflow de release n’existait lors de ce regroupement. Les archives
-GitHub des tags incluent le bundle commité ; aucune release n’est publiée par ce travail.
+`www/`. Aucun workflow ne publie automatiquement de release. Les archives
+GitHub des tags incluent le bundle commité ; la version 0.2.14 publie le regroupement.
 Si un ZIP dédié est ajouté ultérieurement, il devra inclure le dossier `www/` complet.
 La CI vérifie source/bundle, tests Python/JS et contenu de l’archive Git, en plus
 de HACS et hassfest. `python scripts/check_package.py` vérifie le **commit HEAD**.
