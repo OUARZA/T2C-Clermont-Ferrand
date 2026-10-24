@@ -1,6 +1,6 @@
 # T2C Clermont-Ferrand
 
-<img src="logo.png" alt="Logo T2C Clermont-Ferrand" width="100">
+<img src="https://raw.githubusercontent.com/OUARZA/T2C-Clermont-Ferrand/main/logo.png" alt="Logo T2C Clermont-Ferrand" width="100">
 
 Intégration Home Assistant personnalisée pour suivre les prochains passages du
 réseau T2C de Clermont-Ferrand.
@@ -13,7 +13,15 @@ L'intégration expose les passages d'une ligne à un arrêt, les perturbations d
 ligne, les informations réseau générales, ainsi que des attributs détaillés
 utilisables dans des cartes Lovelace personnalisées.
 
-## Nouveautés de la version 0.2.14
+## Nouveautés de la version 0.2.15
+
+- Réponse T2C « Departures not found » traitée comme une absence de passages : l’intégration se charge et les cartes affichent « Aucun passage disponible ».
+- Alertes de ligne conservées et reprise automatique au retour des horaires.
+- Correction de l’URL du logo pour son affichage dans HACS.
+
+Mettre à jour l’intégration dans HACS puis redémarrer Home Assistant.
+
+## Historique — version 0.2.14
 
 - L’intégration et sa carte Lovelace sont distribuées ensemble dans une seule installation HACS.
 - Ressource module enregistrée automatiquement, sans doublons au démarrage ou au rechargement.
@@ -99,6 +107,16 @@ les deux sens). L’intégration utilise donc l’endpoint détaillé par ligne 
 sept départs vers Aulnat à Jaude et six vers Royat aux Chapelles ont été
 observés le 15 octobre 2026. Six n’est pas une limite générale de l’API.
 La synthèse reste disponible uniquement pour les appels du client sans ligne.
+
+### Aucun passage renvoyé par T2C
+
+Lorsque l’API répond HTTP 404 avec `Departures not found for stop … & route …`
+pour l’arrêt et la ligne demandés, les capteurs de passage affichent
+**Aucun passage disponible**. Les anciens horaires sont retirés, les alertes de
+ligne restent consultables et les passages reviennent au prochain rafraîchissement
+réussi. Cette réponse ne prouve ni une fin de service ni une suspension du réseau.
+Les autres erreurs HTTP et les pannes de connexion restent des erreurs de mise à jour
+(capteurs indisponibles).
 
 ### Horaires théoriques et temps réel
 

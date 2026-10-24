@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import T2CClient, T2CError, line_alerts_to_messages
+from .api import T2CClient, T2CError, T2CNoDeparturesError, line_alerts_to_messages
 from .const import (
     CONF_DEPARTURE_LIMIT,
     CONF_DIRECTION_ID,
@@ -24,7 +24,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, Any]]]]):
+class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Coordinate polling of T2C website departures."""
 
     def __init__(
@@ -46,13 +46,14 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
         self.client = client
         self.stop_data = stop_data or dict(entry.data)
 
-    async def _async_update_data(self) -> dict[str, list[dict[str, Any]]]:
+    async def _async_update_data(self) -> dict[str, Any]:
         """Fetch latest departure data."""
         departure_limit = self.entry.data.get(
             CONF_DEPARTURE_LIMIT,
             DEFAULT_DEPARTURE_LIMIT,
         )
         departure_limit = self.stop_data.get(CONF_DEPARTURE_LIMIT, departure_limit)
+        no_departures = False
         try:
             departures = await self.client.async_get_timetable_departures(
                 stop_id=self.stop_data[CONF_STOP_ID],
@@ -60,6 +61,9 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
                 route_id=self.stop_data[CONF_LINE_ID],
                 direction_id=self.stop_data.get(CONF_DIRECTION_ID),
             )
+        except T2CNoDeparturesError:
+            departures = []
+            no_departures = True
         except T2CError as err:
             _LOGGER.debug("T2C coordinator update failed", exc_info=True)
             raise UpdateFailed(str(err)) from err
@@ -104,6 +108,7 @@ class T2CDataUpdateCoordinator(DataUpdateCoordinator[dict[str, list[dict[str, An
         )
         return {
             "departures": departures,
+            "no_departures": no_departures,
             "messages": messages,
             "alerts": alerts,
         }

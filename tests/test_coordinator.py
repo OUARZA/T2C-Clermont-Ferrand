@@ -96,6 +96,25 @@ class CoordinatorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result["departures"]), 1)
         self.assertFalse(result["departures"][0]["has_alert"])
 
+    async def test_no_departures_keeps_alerts_and_recovers(self):
+        coordinator = self.coordinator([])
+        coordinator.client.async_get_timetable_departures.side_effect = (
+            api.T2CNoDeparturesError("No departures")
+        )
+        result = await coordinator._async_update_data()
+        self.assertTrue(result["no_departures"])
+        self.assertEqual(result["departures"], [])
+        self.assertEqual(len(result["alerts"]), 2)
+        self.assertEqual(len(result["messages"]), 2)
+        coordinator.client.async_get_timetable_departures.side_effect = None
+        coordinator.client.async_get_timetable_departures.return_value = [{"route_id": "C"}]
+        result = await coordinator._async_update_data()
+        self.assertFalse(result["no_departures"])
+        self.assertEqual(len(result["departures"]), 1)
+        coordinator.client.async_get_timetable_departures.side_effect = api.T2CConnectionError("offline")
+        with self.assertRaises(UpdateFailed):
+            await coordinator._async_update_data()
+
     async def test_network_messages_unchanged(self):
         client = api.T2CClient(None)
         client._async_get_json_list = AsyncMock(return_value=fixture("line_c_alerts"))

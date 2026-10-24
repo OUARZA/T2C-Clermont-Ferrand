@@ -357,6 +357,8 @@ class T2CDepartureTimeSensor(T2CBaseSensor):
         """Return the departure display value."""
         departure = self._departure
         if departure is None:
+            if (self.coordinator.data or {}).get("no_departures"):
+                return "Aucun passage disponible"
             return "Fin de service"
 
         if departure.get("status") == "cancelled":

@@ -42,6 +42,10 @@ class T2CConnectionError(T2CError):
     """Raised when official T2C data cannot be fetched."""
 
 
+class T2CNoDeparturesError(T2CError):
+    """Raised when T2C explicitly reports no departures for a stop and route."""
+
+
 class T2CDataError(T2CError):
     """Raised when official T2C data cannot be parsed."""
 
@@ -359,7 +363,14 @@ class T2CClient:
             if direction_id is not None:
                 params["direction"] = str(direction_id)
         query = urlencode(params)
-        data = await self._async_get_json_list(f"{url}/departures?{query}")
+        data = await self._async_get_json_list(
+            f"{url}/departures?{query}",
+            no_departures_message=(
+                f"Departures not found for stop {parent_id} & route {route_id}"
+                if route_id is not None
+                else None
+            ),
+        )
         if route_id is not None:
             data = _group_route_departures(data, str(route_id))
         departures = _parse_timetable_departures(
@@ -418,10 +429,21 @@ class T2CClient:
         except (ClientError, ClientResponseError, TimeoutError) as err:
             raise T2CConnectionError(f"Unable to fetch JSON from {url}") from err
 
-    async def _async_get_json_list(self, url: str) -> list[dict[str, Any]]:
+    async def _async_get_json_list(
+        self, url: str, *, no_departures_message: str | None = None
+    ) -> list[dict[str, Any]]:
         """Fetch a JSON list from an official data endpoint."""
         try:
             async with self._session.get(url, timeout=HTTP_TIMEOUT) as response:
+                if response.status == 404 and no_departures_message is not None:
+                    payload = await response.json()
+                    if (
+                        isinstance(payload, dict)
+                        and payload.get("statusCode") == 404
+                        and payload.get("error") == "Not Found"
+                        and payload.get("message") == no_departures_message
+                    ):
+                        raise T2CNoDeparturesError(no_departures_message)
                 response.raise_for_status()
                 data = await response.json()
         except ValueError as err:

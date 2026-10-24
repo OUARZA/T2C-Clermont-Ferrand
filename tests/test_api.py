@@ -290,6 +290,8 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_http_errors_and_invalid_top_level(self):
         class Response:
+            status = 500
+
             async def __aenter__(self):
                 return self
 
@@ -309,6 +311,54 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertRaises(api.T2CDataError),
         ):
             await client._async_get_json_list("https://example.invalid")
+
+    async def test_explicit_no_departures_404_only(self):
+        message = "Departures not found for stop CHAP & route B"
+
+        class Response:
+            status = 404
+
+            def __init__(self):
+                self.payload = {
+                    "message": message, "error": "Not Found", "statusCode": 404
+                }
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def json(self):
+                return self.payload
+
+            def raise_for_status(self):
+                raise api.ClientError("HTTP error")
+
+        response = Response()
+        client = api.T2CClient(types.SimpleNamespace(get=lambda *a, **kw: response))
+        gtfs = index()
+        gtfs.stop_parents = {"CHAPB": "CHAP"}
+        client._async_get_gtfs = AsyncMock(return_value=gtfs)
+        with self.assertRaises(api.T2CNoDeparturesError):
+            await client.async_get_timetable_departures(
+                stop_id="CHAPB", route_id="B", limit=5
+            )
+        # The same payload from a reference/alerts URL is still an HTTP error.
+        with self.assertRaises(api.T2CConnectionError):
+            await client._async_get_json_list("https://example.invalid/reference")
+        for status, payload in (
+            (404, {"message": "Not Found"}),
+            (404, dict(response.payload, message="Departures not found for stop OTHER & route B")),
+            (500, response.payload),
+        ):
+            with self.subTest(status=status, payload=payload):
+                response.status = status
+                response.payload = payload
+                with self.assertRaises(api.T2CConnectionError):
+                    await client.async_get_timetable_departures(
+                        stop_id="CHAPB", route_id="B", limit=5
+                    )
 
     async def test_line_messages_reuse_official_alerts(self):
         client = api.T2CClient(None)
