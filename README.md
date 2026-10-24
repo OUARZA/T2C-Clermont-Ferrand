@@ -5,6 +5,10 @@
 Intégration Home Assistant personnalisée pour suivre les prochains passages du
 réseau T2C de Clermont-Ferrand.
 
+La carte Lovelace est maintenant incluse : une seule installation HACS fournit les
+deux composants. Voir [l’installation commune](#installation-commune--intégration-et-carte)
+et [la migration de l’ancienne carte](#migration-depuis-la-carte-hacs-séparée).
+
 L'intégration expose les passages d'une ligne à un arrêt, les perturbations de
 ligne, les informations réseau générales, ainsi que des attributs détaillés
 utilisables dans des cartes Lovelace personnalisées.
@@ -26,8 +30,7 @@ utilisables dans des cartes Lovelace personnalisées.
 
 Installer la mise à jour, puis redémarrer Home Assistant. Les arrêts déjà
 configurés sont conservés ; aucune suppression ni recréation n’est nécessaire.
-Un arrêt réglé sur cinq passages reste réglé sur cinq. La carte Lovelace
-appartient à un autre projet et n’est pas modifiée par cette mise à jour.
+Un arrêt réglé sur cinq passages reste réglé sur cinq. La carte Lovelace est désormais fournie par cette intégration (voir migration ci-dessous).
 
 ## Fonctionnalités
 
@@ -103,7 +106,7 @@ La synthèse reste disponible uniquement pour les appels du client sans ligne.
 
 Une liste peut mélanger horaires théoriques et temps réel. Les attributs
 des capteurs et les clés compactes `theorique` / `temps_reel` restent compatibles
-avec la carte Lovelace, qui appartient à un autre projet.
+avec la carte Lovelace fournie dans ce dépôt.
 
 Les passages, les alertes et les informations réseau utilisent uniquement
 `api.t2c.fr`. Le GTFS statique reste nécessaire aux références et aux sélecteurs.
@@ -403,3 +406,154 @@ Avec Python 3.12 ou supérieur :
 python -m pip install -r tests/requirements.txt
 python -m unittest discover -s tests -v
 ```
+
+
+## Installation commune : intégration et carte
+
+Home Assistant **2026.10.0 minimum** pour cette version regroupée. Installer uniquement
+**OUARZA/T2C-Clermont-Ferrand**, catégorie **Intégration** dans HACS, puis redémarrer
+Home Assistant. Le dossier `custom_components/t2c_clermontferrand/www/` est inclus
+avec l’intégration ; aucune installation Dashboard supplémentaire n’est nécessaire.
+Après la configuration d’une entrée T2C, la carte est servie et sa ressource de type
+module est créée automatiquement lorsque les ressources Lovelace sont gérées par l’interface.
+Le rechargement d’une entrée et plusieurs entrées réutilisent le même chemin HTTP.
+Les ressources restent présentes si la dernière entrée est déchargée, pour permettre
+son rechargement ; elles ne sont pas supprimées automatiquement lors d’une désinstallation.
+
+![Carte T2C](docs/card-preview.png)
+
+Ajouter une carte « T2C Clermont-Ferrand Card » dans l’éditeur visuel, sélectionner
+le capteur `passage_1`, puis ajuster les options. Les dashboards existants gardent
+le même type et la même configuration :
+
+```yaml
+type: custom:t2c-clermontferrand-card
+entity: sensor.ligne_b_direction_royat_pl_allard_arret_les_chapelles_passage_1
+title: Les Chapelles
+passages: 5
+show_network_info: true
+```
+
+| Option | Défaut | Usage |
+| --- | --- | --- |
+| `entity` | obligatoire | Capteur passage_1 ; les autres passages utilisent son préfixe. |
+| `title` | nom de l’arrêt | Titre personnalisé. |
+| `passages` | 5 | Entre 1 et 6, limite identique dans l’éditeur et en YAML. |
+| `show_network_info` | false | Informations générales du réseau. |
+| `line` | détection automatique | Surcharge historique du libellé de ligne en YAML. |
+
+L’éditeur visuel, les couleurs de lignes, les alertes au clic et l’icône verte de
+temps réel sont conservés. Les horaires théoriques restent sans astérisque.
+
+## Migration depuis la carte HACS séparée
+
+1. Sauvegarder Home Assistant, noter les URL et types de ressources T2C existants,
+   et conserver la version précédente de l’intégration et de la carte pour un retour arrière.
+2. Installer cette version de l’intégration et redémarrer Home Assistant. Ne pas
+   désinstaller la carte séparée avant d’avoir vérifié la ressource et l’affichage.
+3. En gestion des ressources par l’interface, l’intégration remplace en place une
+   ressource T2C reconnue, conserve son identifiant et retire ses doublons reconnus.
+   Les autres ressources sont préservées. La ressource finale est de type module :
+   `/t2c_clermontferrand/t2c_clermont-ferrand_card.js?v=<empreinte>`.
+   L’empreinte du fichier renouvelle le cache à chaque changement du JavaScript.
+4. Vérifier dans les ressources qu’une seule version T2C est active. Les chemins
+   personnalisés non listés ci-dessous doivent être retirés manuellement **après
+   vérification qu’ils correspondent bien à cette carte**. Ne pas retirer les autres cartes.
+5. Fermer ou actualiser complètement **tous** les onglets et applications Companion
+   utilisant les dashboards. Un composant déjà chargé dans un navigateur ne peut
+   pas être remplacé à chaud : Ctrl+F5 ou fermeture/réouverture est nécessaire.
+6. Tester l’affichage et l’éditeur. Ensuite seulement, désinstaller dans HACS l’ancien
+   dépôt **T2C-Clermont-Ferrand-Card** (Dashboard), puis vérifier à nouveau les ressources.
+   Ne pas réinstaller ou mettre à jour l’ancienne carte ensuite : HACS pourrait recréer
+   son ancienne ressource. Si cela arrive, la retirer puis rafraîchir les navigateurs ;
+   un rechargement de l’entrée T2C réconcilie aussi les chemins reconnus.
+
+Les seuls anciens chemins migrés automatiquement sont les suivants ; les paramètres
+`?v=…`, `?hacstag=…` et fragments sont ignorés pour les reconnaître :
+
+- `/hacsfiles/T2C-Clermont-Ferrand-Card/t2c_clermont-ferrand_card.js`
+- `/local/community/T2C-Clermont-Ferrand-Card/t2c_clermont-ferrand_card.js`
+- `/local/community/t2c_clermontferrand_card/t2c_clermont-ferrand_card.js`
+- `/local/community/t2c_clermontferrand_card/dist/t2c_clermont-ferrand_card.js`
+
+Une URL externe ou un autre dossier n’est jamais supprimé sur la seule base du nom
+JavaScript. Aucun fichier de l’ancienne carte ni fichier utilisateur n’est supprimé.
+
+### Si la carte disparaît après désinstallation de l’ancien paquet
+
+Lors du test sur une instance, une erreur « Custom element doesn't exist » est
+apparue après la désinstallation de l’ancienne carte HACS. La suppression de la
+ressource T2C depuis l’interface, suivie de sa recréation automatique par
+l’intégration, a rétabli la carte. La cause précise n’a pas été établie.
+
+Si cela se produit en gestion des ressources par l’interface : noter l’URL T2C,
+supprimer **uniquement** la ressource de cette carte, recharger l’entrée T2C pour
+la recréer si nécessaire, puis rafraîchir complètement le dashboard. Vérifier
+qu’une seule ressource module sous /t2c_clermontferrand/ est présente. Ne pas
+supprimer les ressources des autres cartes. Pour les ressources YAML, suivre
+la procédure manuelle ci-dessous.
+
+### Ressources gérées en YAML
+
+La gestion des ressources est indépendante du mode du dashboard : un dashboard YAML
+peut utiliser des ressources en stockage. Si les **ressources** sont en YAML,
+l’intégration sert le fichier mais ne modifie ni leur collection ni les fichiers.
+Un avertissement donne l’URL exacte avec empreinte dans les journaux au démarrage.
+Remplacer manuellement les anciennes entrées de cette carte par **une seule** :
+
+```yaml
+lovelace:
+  resource_mode: yaml
+  resources:
+    - url: /t2c_clermontferrand/t2c_clermont-ferrand_card.js?v=<empreinte_des_journaux>
+      type: module
+```
+
+Adapter la section existante ou son fichier inclus ; ne pas dupliquer `lovelace:`.
+Conserver toutes les autres ressources. Recharger les ressources Lovelace puis tous
+les navigateurs. À chaque mise à jour de la carte, reporter la nouvelle empreinte
+indiquée dans les journaux pour renouveler le cache.
+
+### Retour arrière
+
+Restaurer la sauvegarde est la solution complète. Sinon : réinstaller la précédente
+version de l’intégration, réinstaller l’ancienne carte HACS si nécessaire, puis
+retirer uniquement la ressource `/t2c_clermontferrand/t2c_clermont-ferrand_card.js`
+et restaurer **une seule** ancienne ressource T2C (module) notée à l’étape 1.
+Faire l’équivalent dans le YAML si nécessaire. Redémarrer Home Assistant et fermer
+ou rafraîchir tous les navigateurs. Les configurations des cartes et les entités
+n’ont pas à être recréées. Restaurer l’ancienne version de l’intégration avant
+l’ancienne ressource évite que la migration ne la remplace à nouveau.
+
+## Développement de la carte et distribution
+
+La carte provient de la copie locale du dépôt séparé, `main` au commit
+`ae1c932` (version 0.2.9), sans modifications non publiées lors de l’import.
+Le JavaScript d’origine était déjà la source maintenue, sans bundler ni dépendance
+externe. Il est désormais dans `frontend/src/t2c_clermont-ferrand_card.js`, avec
+sa licence. L’éditeur est dans le même fichier. Aucun CDN ou paquet npm n’est requis.
+
+Avec Node.js 22+, depuis `frontend/` :
+
+```sh
+npm run build
+npm run check
+npm test
+```
+
+La construction copie de façon déterministe la source dans le dossier `www/` de
+l’intégration. Commiter **source et fichier construit** ensemble. Redémarrer Home
+Assistant après le déploiement du fichier construit pour recalculer l’empreinte.
+La garde du composant et de son éditeur empêche une double déclaration ; elle ne
+remplace pas le retrait des ressources anciennes ni le rafraîchissement navigateur.
+
+HACS reste en catégorie intégration, sans `zip_release` et sans filtre de fichiers :
+il distribue le dossier complet `custom_components/t2c_clermontferrand/`, y compris
+`www/`. Aucun workflow de release n’existait lors de ce regroupement. Les archives
+GitHub des tags incluent le bundle commité ; aucune release n’est publiée par ce travail.
+Si un ZIP dédié est ajouté ultérieurement, il devra inclure le dossier `www/` complet.
+La CI vérifie source/bundle, tests Python/JS et contenu de l’archive Git, en plus
+de HACS et hassfest. `python scripts/check_package.py` vérifie le **commit HEAD**.
+
+Voir [la vérification des API et les tests sur instance](docs/bundled-card-validation.md)
+et [le texte préparé pour l’ancien dépôt](docs/old-card-repository-notice.md).

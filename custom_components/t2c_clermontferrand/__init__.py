@@ -25,6 +25,7 @@ from .const import (
     GLOBAL_ENTRY_ID,
 )
 from .coordinator import T2CDataUpdateCoordinator, T2CNetworkCoordinator
+from .frontend import async_setup_frontend
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class T2CRuntimeData:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up T2C Clermont-Ferrand from a config entry."""
+    await async_setup_frontend(hass)
     client = T2CClient(async_get_clientsession(hass))
     network_coordinator = T2CNetworkCoordinator(hass, client)
     configured_stops = await _async_enrich_stop_colors(hass, entry, client)
