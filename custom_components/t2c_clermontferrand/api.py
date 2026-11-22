@@ -823,7 +823,7 @@ def _build_route_directions(
     trip_directions: dict[str, str],
 ) -> dict[str, list[T2CDirection]]:
     """Build route direction choices from GTFS trips."""
-    by_route: dict[str, dict[str, T2CDirection]] = {}
+    by_route: dict[str, dict[str, set[str]]] = {}
 
     for trip_id, route_id in trip_routes.items():
         direction_id = trip_directions.get(trip_id, "")
@@ -832,13 +832,19 @@ def _build_route_directions(
         if not direction_id or not headsign:
             continue
 
-        by_route.setdefault(route_id, {}).setdefault(
-            direction_id,
-            T2CDirection(direction_id=direction_id, name=headsign),
-        )
+        by_route.setdefault(route_id, {}).setdefault(direction_id, set()).add(headsign)
 
     return {
-        route_id: sorted(directions.values(), key=lambda direction: direction.name)
+        route_id: sorted(
+            (
+                T2CDirection(
+                    direction_id=direction_id,
+                    name=" / ".join(sorted(headsigns)),
+                )
+                for direction_id, headsigns in directions.items()
+            ),
+            key=lambda direction: direction.name,
+        )
         for route_id, directions in by_route.items()
     }
 
